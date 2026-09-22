@@ -8,6 +8,7 @@ A local, read-only Codex output-speed monitor under construction.
 - read bounded JSONL streams with recovery.
 - extract scoped submission and diagnostic evidence.
 - correlate rollout output with usage and timing.
+- persist pseudonymized history and export safe CSV.
 
 ## Development
 
