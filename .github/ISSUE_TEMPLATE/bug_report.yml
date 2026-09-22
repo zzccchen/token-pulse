@@ -1,0 +1,34 @@
+name: Bug report / 问题报告
+description: Report a reproducible problem using synthetic or redacted evidence.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English and Chinese are welcome. Do not upload raw Codex logs, conversation text, credentials, private paths, or databases. For a security vulnerability, use the Security tab's private reporting form.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior / 预期与实际行为
+      description: Describe what you expected and what happened.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction / 复现步骤
+      description: Prefer demo mode or a minimal synthetic event sequence.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 环境
+      description: Include TokenPulse revision, Codex version, OS, Python/Qt versions, and Linux desktop/display server if applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe evidence / 脱敏证据
+      description: Optional diagnostic summary or synthetic screenshots. Review any output before sharing.

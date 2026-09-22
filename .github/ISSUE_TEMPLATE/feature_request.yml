@@ -1,0 +1,26 @@
+name: Feature request / 功能建议
+description: Explain a user problem and a focused improvement.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: English and Chinese are welcome. Please check the roadmap and existing issues.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem / 使用场景
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 建议行为
+      description: Describe the result you want, alternatives, and available evidence if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Privacy and measurement / 隐私与测速
+      description: Does this require new data sources, network access, or a different measurement scope?
