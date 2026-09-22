@@ -4,13 +4,14 @@ A local, read-only Codex output-speed monitor under construction.
 
 ## Available in this stage
 
-Installable Python package and locked development tooling.
+- define output evidence and weighted model statistics.
 
 ## Development
 
 ```sh
 uv sync --locked
 uv build
+uv run pytest
 ```
 
 Use synthetic data. Measurement needs matching output tokens and stream boundaries; missing evidence stays unknown.
