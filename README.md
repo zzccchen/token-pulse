@@ -12,6 +12,7 @@ A local, read-only Codex output-speed monitor under construction.
 - recover historical sessions in bounded batches.
 - discover local tasks and coordinate collection.
 - publish background snapshots from local observations.
+- add offline localization and persistent preferences.
 
 ## Development
 
