@@ -10,6 +10,7 @@ A local, read-only Codex output-speed monitor under construction.
 - correlate rollout output with usage and timing.
 - persist pseudonymized history and export safe CSV.
 - recover historical sessions in bounded batches.
+- discover local tasks and coordinate collection.
 
 ## Development
 
