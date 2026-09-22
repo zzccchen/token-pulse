@@ -18,6 +18,7 @@ A local, read-only Codex output-speed monitor under construction.
 - visualize completed output as interactive scatter points.
 - build model panel history and settings windows.
 - connect tray lifecycle and bilingual application entry points.
+- add standalone packaging and synthetic screenshot tools.
 
 ## Development
 
