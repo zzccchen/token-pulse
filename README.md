@@ -17,6 +17,7 @@ A local, read-only Codex output-speed monitor under construction.
 - introduce accessible themes and shared control surfaces.
 - visualize completed output as interactive scatter points.
 - build model panel history and settings windows.
+- connect tray lifecycle and bilingual application entry points.
 
 ## Development
 
@@ -24,6 +25,7 @@ A local, read-only Codex output-speed monitor under construction.
 uv sync --locked
 uv build
 uv run pytest
+uv run token-pulse --demo
 ```
 
 Use synthetic data. Measurement needs matching output tokens and stream boundaries; missing evidence stays unknown.

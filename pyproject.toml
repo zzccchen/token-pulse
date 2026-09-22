@@ -23,9 +23,17 @@ classifiers = [
 ]
 dependencies = ["PySide6-Essentials>=6.8,<7"]
 
+[project.gui-scripts]
+token-pulse = "token_pulse.__main__:main"
+
+[project.scripts]
+token-pulse-cli = "token_pulse.__main__:main"
+
 [project.urls]
 Repository = "https://github.com/zzccchen/token-pulse"
+Documentation = "https://github.com/zzccchen/token-pulse#readme"
 Issues = "https://github.com/zzccchen/token-pulse/issues"
+Changelog = "https://github.com/zzccchen/token-pulse/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
