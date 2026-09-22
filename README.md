@@ -5,6 +5,7 @@ A local, read-only Codex output-speed monitor under construction.
 ## Available in this stage
 
 - define output evidence and weighted model statistics.
+- read bounded JSONL streams with recovery.
 
 ## Development
 
