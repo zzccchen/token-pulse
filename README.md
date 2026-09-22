@@ -13,6 +13,7 @@ A local, read-only Codex output-speed monitor under construction.
 - discover local tasks and coordinate collection.
 - publish background snapshots from local observations.
 - add offline localization and persistent preferences.
+- aggregate rolling model timelines and synthetic demos.
 
 ## Development
 
