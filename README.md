@@ -14,6 +14,7 @@ A local, read-only Codex output-speed monitor under construction.
 - publish background snapshots from local observations.
 - add offline localization and persistent preferences.
 - aggregate rolling model timelines and synthetic demos.
+- introduce accessible themes and shared control surfaces.
 
 ## Development
 
