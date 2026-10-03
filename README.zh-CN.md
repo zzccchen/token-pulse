@@ -29,7 +29,9 @@
 
 ## 快速体验
 
-需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
+**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.1) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
+
+**从源码运行（Windows 或 Linux）：**需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
 ```sh
 git clone https://github.com/zzccchen/token-pulse.git
@@ -67,7 +69,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 ## 当前状态与边界
 
-项目处于 **0.1.0** 早期阶段。支持版本：**Codex CLI 0.153.4–0.160.0**。内部日志格式可能变化，详见[兼容性说明](docs/compatibility.md#codex-versions)。
+项目处于 **0.1.1** 早期阶段。支持版本：**Codex CLI 0.153.4–0.160.0**。内部日志格式可能变化，详见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |
@@ -77,7 +79,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 日志缺失或轮转可能造成数据空缺。当前尚未读取最终服务端确认层级。远程主机、其他客户端、费用统计和修改 Codex 设置不在当前范围内。
 
-目前请按上面的说明从源码运行。Windows 构建脚本也会生成独立 EXE、附带依赖许可说明的 ZIP 和 SHA-256 校验值；EXE 不需要另外安装 Python。这些是未签名的本地验证构建，仍待完成分发审查和干净机器测试。尚未公开发布二进制文件或 PyPI 包。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
+Windows 便携包附带依赖许可说明、对应 Qt/PySide 源码和 SHA-256 校验值。干净 Windows 机器测试仍待完成。尚未发布 PyPI 包或 Linux 二进制文件。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
 
 ## 参与贡献
 

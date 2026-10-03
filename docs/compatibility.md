@@ -29,6 +29,8 @@ A Windows publication-preparation run on 2026-09-21 passed 205 offline tests and
 
 On 2026-10-03, 205 offline tests, Ruff, formatting, and local documentation-link checks passed. A fresh Windows x64 ZIP (Python 3.13.7, Qt 6.11.2, PyInstaller 6.22.2) passed archive integrity, selected-content, and SHA-256 checks. The extracted EXE started and exited successfully in isolated demo smoke tests with normal-window, tray, and hidden-start options, using a restricted PATH outside the source tree. These automated startup checks do not establish manual tray interaction, a clean-machine installation, signing, or completed binary distribution review.
 
+The subsequent 0.1.1 portable-build preparation on the same date passed 218 offline tests, including notice extraction, missing-license rejection, source-hash verification, and Qt component selection checks. The directory-based ZIP passed all three isolated native startup/exit modes with a restricted PATH. A separate offscreen process-module check confirmed loading Qt Core, Gui, and Widgets DLLs from the portable directory. Matching Qt/PySide sources and notices are included as described in [Windows distribution](windows-distribution.md). Clean-machine validation and signing remain outside these checks.
+
 ## Linux runtime
 
 CI installs `libegl1`, `libopengl0`, and `libxkbcommon0` on Ubuntu. Real X11/Wayland platform plugins may need additional desktop-specific libraries; inspect Qt's load error for the target distribution. The locked x86-64 Linux Qt wheel uses `manylinux_2_34`; older glibc systems are outside the recorded validation.

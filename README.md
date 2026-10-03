@@ -29,7 +29,9 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
-You need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
+**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.1), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
+
+**From source (Windows or Linux):** you need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```sh
 git clone https://github.com/zzccchen/token-pulse.git
@@ -67,7 +69,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.0** project. Supported versions: **Codex CLI 0.153.4–0.160.0**. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for details.
+TokenPulse is an early **0.1.1** project. Supported versions: **Codex CLI 0.153.4–0.160.0**. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for details.
 
 | Environment | Validation scope |
 | --- | --- |
@@ -77,7 +79,7 @@ TokenPulse is an early **0.1.0** project. Supported versions: **Codex CLI 0.153.
 
 Missing or rotated logs can leave gaps. Final server-confirmed service tiers are not currently extracted. Remote hosts, other clients, cost tracking, and changing Codex settings are outside the current scope.
 
-Use the source instructions above for now. The Windows builder also produces a standalone EXE, a ZIP with dependency notices, and SHA-256 checksums; the EXE needs no separate Python installation. These are unsigned local validation builds, pending distribution review and clean-machine testing. There is no public binary or PyPI release yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
+Windows portable builds include dependency notices, corresponding Qt/PySide sources, and SHA-256 checksums. Clean-machine Windows testing remains pending. There is no PyPI release or Linux binary yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
 
 ## Contribute
 

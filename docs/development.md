@@ -41,17 +41,21 @@ The script captures panel, history, settings, and empty states from synthetic da
 
 `uv build` creates a source archive and wheel in `dist/`. The wheel does not bundle Python or Qt; a package manager installs dependencies. Inspect archive contents and test installation in a fresh environment before distributing them.
 
-For a **local Windows EXE**, use an isolated packaging environment in PowerShell:
+For the **Windows portable ZIP**, use the audited Python 3.13.7 runtime and an isolated packaging environment in PowerShell:
 
 ```powershell
 $env:UV_PROJECT_ENVIRONMENT = 'build/.venv-packaging'
-uv sync --locked --group packaging
+uv sync --locked --group packaging --python 3.13.7
 uv run --locked --group packaging python scripts/build_windows.py
 ```
 
-This creates `dist/windows/TokenPulse.exe`, a versioned Windows ZIP, and `SHA256SUMS.txt`. The ZIP includes dependency notices, `build-info.json` with runtime versions, and startup instructions. Notices are also embedded in the EXE. Only explicitly selected build files enter the ZIP; application data is not copied. Use `--output-dir <directory>` to choose a different destination, for example when a previous EXE is running. Each build uses fresh notice staging. The single-file GUI executable unpacks runtime dependencies to a temporary directory and opens no console. Use the source `token-pulse-cli` entry point for diagnostic output. The EXE shares the app data directory with a source installation; close existing instances before testing it.
+This produces a versioned portable ZIP and `SHA256SUMS.txt` in `dist/windows/`. Extract the entire ZIP and launch `TokenPulse.exe`; the `_internal` directory contains external DLLs that users can replace. Do not distribute the EXE alone. The ZIP includes licenses, upstream attributions, complete Qt Base and PySide/Shiboken source archives, the corresponding application source, runtime metadata, and [library replacement instructions](windows-distribution.md). It requires no separate Python installation.
 
-The EXE is not signed or offered as a supported download. Its full distribution review is separate from source publication; see [third-party notices](../THIRD_PARTY.md). No AppImage or PyPI release is currently provided.
+The builder downloads source/notice inputs from pinned upstream URLs, verifies SHA-256, and caches them in `build/license-sources/`. This is build-time network access only. The application remains offline. Dependency versions are checked against the reviewed Python 3.13.7 / OpenSSL 3.5.3 / Qt 6.11.2 inputs; update the review and source manifest before changing them. The Qt source hashes were verified against the official download mirror metadata.
+
+Fresh staging avoids stale notices and leaves running older copies untouched. Use `--output-dir <directory>` for a separate output destination. The source snapshot uses Git's tracked-file list; commit all intended source files before release builds. The EXE uses the same app data directory as a source installation; close existing instances before local collection, or use isolated `--demo` smoke checks.
+
+The build is unsigned. Clean-machine Windows validation remains pending; no AppImage or PyPI release is provided. See [third-party notices](../THIRD_PARTY.md) for distribution terms.
 
 ## Release verification
 

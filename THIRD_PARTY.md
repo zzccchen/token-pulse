@@ -9,9 +9,11 @@ TokenPulse's own code is licensed under [MIT](LICENSE). That does not change the
 - **PyInstaller.** The local EXE builder uses PyInstaller, which has an exception for distributing applications built with it. See its [license and exception](https://pyinstaller.org/en/stable/license.html). This does not replace the licenses of bundled dependencies.
 - Development tools retain their own licenses. They are not imported by the running application.
 
-The source archive and wheel do not bundle Qt or Python; installation resolves dependencies through the package manager. The Windows build script copies available runtime license files and package metadata into the executable and the versioned Windows ZIP.
+The source archive and wheel do not bundle Qt or Python; installation resolves dependencies through the package manager.
 
-**Public EXE distribution has not been completed.** Existing wheel notices are not a complete distribution audit. Before publishing a frozen application, review all bundled components, applicable notices, corresponding-source obligations, and replacement/relinking arrangements under the selected licenses. The current build is for local validation and is unsigned.
+The Windows portable ZIP uses the LGPLv3 option for Qt/PySide/Shiboken. It includes the LGPLv3 and GPLv3 texts, upstream attribution records and referenced license files, Python and OpenSSL notices, and the PyInstaller exception. Complete, unmodified Qt Base and PySide/Shiboken source archives are included in `sources/` alongside the corresponding TokenPulse source snapshot. DLLs remain external and replaceable; no integrity enforcement prevents running modified libraries.
+
+See [Windows distribution and library replacement](docs/windows-distribution.md) for the component inventory, library replacement/rebuild instructions, Microsoft runtime terms, and validation limits. The build remains unsigned. Every dependency version change requires a fresh source/notice review; the builder checks the audited versions and pinned source hashes.
 
 ## Design references
 
