@@ -1,6 +1,19 @@
 # Compatibility and limits
 
-TokenPulse targets Windows and Linux. Internal Codex log formats are not a stable API; the current adapter targets observed 0.153.4-series formats and associated synthetic fixtures. No claim is made for all Codex versions.
+TokenPulse targets Windows and Linux. Supported Codex CLI versions: **0.153.4–0.160.0**. Internal Codex log formats are not a stable API.
+
+## Codex versions
+
+| Component | Evidence recorded on 2026-10-03 | Scope |
+| --- | --- | --- |
+| Codex CLI 0.153.4–0.160.0 | Supported version range | Local session and diagnostic log collection |
+| Standalone Codex CLI 0.153.4 | Local `codex --version`; original parser fixtures | Original parser baseline; standalone installation remains at this version |
+| Codex desktop 26.930.3930.0 (Windows package) | Installed package metadata | Desktop package version, not the log protocol version |
+| Desktop-bundled Codex CLI 0.160.0 | Bundled executable `--version` | Present in the environment used for the collection check |
+
+The bounded read-only diagnostic command found measurable outputs with both session-item and diagnostic-stream timing, with no reported source diagnostics in that run. This is not a complete recovery or exhaustive protocol-conformance test. Existing sessions may contain events from multiple client versions. No private logs or session identities are included here. Internal formats may change independently of desktop version numbers.
+
+Model names come from local evidence; there is no fixed supported-model list. Seeing a model in the dropdown does not establish timing coverage or server-side service tier.
 
 ## Platform evidence
 
@@ -13,6 +26,8 @@ TokenPulse targets Windows and Linux. Internal Codex log formats are not a stabl
 The native Windows and WSL observations above were recorded during development on 2026-09-08. A local Windows EXE check on 2026-09-09 used Windows build 26200, Python 3.13.7, Qt 6.11.2, and PyInstaller 6.22.2. It exercised demo, tray, and hidden startup with a restricted PATH. It did not test a fresh Windows installation, signing, or full distribution readiness.
 
 A Windows publication-preparation run on 2026-09-21 passed 205 offline tests and Ruff checks. Test counts describe that run, not a permanent project promise.
+
+On 2026-10-03, 205 offline tests, Ruff, formatting, and local documentation-link checks passed. A fresh Windows x64 ZIP (Python 3.13.7, Qt 6.11.2, PyInstaller 6.22.2) passed archive integrity, selected-content, and SHA-256 checks. The extracted EXE started and exited successfully in isolated demo smoke tests with normal-window, tray, and hidden-start options, using a restricted PATH outside the source tree. These automated startup checks do not establish manual tray interaction, a clean-machine installation, signing, or completed binary distribution review.
 
 ## Linux runtime
 

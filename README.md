@@ -1,8 +1,8 @@
 # TokenPulse · 词脉
 
-**See how fast your local Codex sessions are producing output.**
+**A local output-speed monitor for Codex, built with Codex.**
 
-A local, read-only tray monitor for Windows and Linux. Pick a model, inspect completed output speeds across conversations, and keep your observations on your own machine.
+TokenPulse is a read-only tray app for Windows and Linux. Pick a model and a time window to see output speeds across conversations. It reads local Codex logs and keeps your history on your computer.
 
 [![Checks](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -67,7 +67,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.0** project. The adapter targets observed **Codex 0.153.4-series local log formats**; these internal formats can change.
+TokenPulse is an early **0.1.0** project. Supported versions: **Codex CLI 0.153.4–0.160.0**. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for details.
 
 | Environment | Validation scope |
 | --- | --- |
@@ -77,7 +77,7 @@ TokenPulse is an early **0.1.0** project. The adapter targets observed **Codex 0
 
 Missing or rotated logs can leave gaps. Final server-confirmed service tiers are not currently extracted. Remote hosts, other clients, cost tracking, and changing Codex settings are outside the current scope.
 
-Install from source today. Python packages and a Windows EXE can be built locally; there is no PyPI release or supported downloadable EXE yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
+Use the source instructions above for now. The Windows builder also produces a standalone EXE, a ZIP with dependency notices, and SHA-256 checksums; the EXE needs no separate Python installation. These are unsigned local validation builds, pending distribution review and clean-machine testing. There is no public binary or PyPI release yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
 
 ## Contribute
 
@@ -88,7 +88,7 @@ Useful first contributions include Linux desktop validation, synthetic format re
 - [Contribution guide](CONTRIBUTING.md) · [Development](docs/development.md) · [Architecture](docs/architecture.md)
 - [Roadmap](ROADMAP.md) · [Security reporting](SECURITY.md)
 
-English and Chinese reports are welcome. If TokenPulse is useful to you, a star helps other people find it.
+Found a problem? [Open an issue](https://github.com/zzccchen/token-pulse/issues). English and Chinese are both welcome.
 
 ## License
 

@@ -1,10 +1,16 @@
 """Build a standalone Windows GUI executable from the locked packaging environment."""
 
+import argparse
+import hashlib
 import importlib.metadata
+import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -18,8 +24,15 @@ def main() -> int:
     from token_pulse.ui.theme import pulse_icon
 
     root = Path(__file__).resolve().parents[1]
-    staging = root / "build" / "windows"
-    staging.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-dir", type=Path, default=root / "dist" / "windows")
+    args = parser.parse_args()
+    output = args.output_dir.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    build_root = root / "build" / "windows"
+    build_root.mkdir(parents=True, exist_ok=True)
+    # Fresh staging prevents old dependency notices from leaking into a new build.
+    staging = Path(tempfile.mkdtemp(prefix="package-", dir=build_root))
     app = QApplication.instance() or QApplication([])
     icon_path = staging / "TokenPulse.ico"
     if not pulse_icon().pixmap(64, 64).save(str(icon_path), "ICO"):
@@ -92,7 +105,7 @@ def main() -> int:
             f"--icon={icon_path}",
             f"--version-file={version_file}",
             f"--add-data={notices}:notices",
-            f"--distpath={root / 'dist'}",
+            f"--distpath={output}",
             f"--workpath={staging / 'work'}",
             f"--specpath={staging}",
             str(root / "src" / "token_pulse" / "__main__.py"),
@@ -101,9 +114,46 @@ def main() -> int:
         env=environment,
         check=True,
     )
-    # Keep notices accessible alongside the single-file executable as well.
-    shutil.copytree(notices, root / "dist" / "notices", dirs_exist_ok=True)
-    print(f"已生成：{root / 'dist' / 'TokenPulse.exe'}")
+    manifest = {
+        "token_pulse": __version__,
+        "python": platform.python_version(),
+        "architecture": platform.machine(),
+        "dependencies": {
+            name: importlib.metadata.version(name)
+            for name in ("PySide6-Essentials", "shiboken6", "pyinstaller")
+        },
+        "signed": False,
+        "status": "Local validation build; public distribution review pending.",
+    }
+    archive = output / f"TokenPulse-{__version__}-windows-{platform.machine().lower()}.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        bundle.write(output / "TokenPulse.exe", "TokenPulse.exe")
+        for file in sorted(notices.rglob("*")):
+            if file.is_file():
+                bundle.write(file, f"notices/{file.relative_to(notices).as_posix()}")
+        bundle.writestr("build-info.json", json.dumps(manifest, indent=2) + "\n")
+        bundle.writestr(
+            "START-HERE.txt",
+            "TokenPulse - local validation build (unsigned)\n\n"
+            "Extract the ZIP and open TokenPulse.exe. Python is bundled.\n"
+            "For an isolated demo: TokenPulse.exe --demo\n"
+            "For a normal window: TokenPulse.exe --no-tray\n"
+            "Close other TokenPulse instances before collecting local data.\n"
+            "Use the tray menu to quit when the tray is available.\n\n"
+            "Public distribution review and clean-machine testing are pending.\n"
+            "https://github.com/zzccchen/token-pulse\n"
+            "Independent project; not affiliated with OpenAI.\n",
+        )
+    artifacts = [output / "TokenPulse.exe", archive]
+    checksums = []
+    for file in artifacts:
+        with file.open("rb") as stream:
+            checksums.append(f"{hashlib.file_digest(stream, 'sha256').hexdigest()}  {file.name}\n")
+    (output / "SHA256SUMS.txt").write_text(
+        "".join(checksums),
+        encoding="utf-8",
+    )
+    print(f"Built executable, ZIP and SHA256SUMS.txt in {output}")
     app.quit()
     return 0
 

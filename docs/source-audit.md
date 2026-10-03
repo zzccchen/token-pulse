@@ -1,6 +1,6 @@
 # Codex source evidence
 
-This is a version-scoped adapter reference, not a promise about future Codex formats. The project was developed against observed 0.153.4-series local logs. Earlier source review used the public `rust-v0.153.0` implementation. A session's creation version need not match every later appended event.
+This is a version-scoped adapter reference, not a promise about future Codex formats. The project was developed against observed 0.153.4-series local logs. The supported Codex CLI range is 0.153.4–0.160.0; see [compatibility](compatibility.md#codex-versions) for details. Earlier source review used the public `rust-v0.153.0` implementation. A session's creation version need not match every later appended event.
 
 ## Source relationships
 

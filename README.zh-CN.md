@@ -1,8 +1,8 @@
 # TokenPulse · 词脉
 
-**一眼看清本机 Codex 的输出速度。**
+**由 Codex 开发的本地 Codex 输出速度监视器。**
 
-面向 Windows 和 Linux 的本地只读托盘监视器。选择模型，查看跨对话的已完成输出速度，观测数据留在自己的电脑上。
+词脉是面向 Windows 和 Linux 的只读托盘应用。选择模型和时间范围，查看跨对话的输出速度。它读取本机 Codex 日志，历史记录留在自己的电脑上。
 
 [![检查](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml)
 [![MIT 许可证](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -67,7 +67,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 ## 当前状态与边界
 
-项目处于 **0.1.0** 早期阶段，当前适配已观测的 **Codex 0.153.4 系列本地日志格式**；这些内部格式可能变化。
+项目处于 **0.1.0** 早期阶段。支持版本：**Codex CLI 0.153.4–0.160.0**。内部日志格式可能变化，详见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |
@@ -77,7 +77,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 日志缺失或轮转可能造成数据空缺。当前尚未读取最终服务端确认层级。远程主机、其他客户端、费用统计和修改 Codex 设置不在当前范围内。
 
-目前请从源码运行。可以本地构建 Python 包和 Windows EXE；尚未发布到 PyPI，也没有正式提供可下载的 EXE。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
+目前请按上面的说明从源码运行。Windows 构建脚本也会生成独立 EXE、附带依赖许可说明的 ZIP 和 SHA-256 校验值；EXE 不需要另外安装 Python。这些是未签名的本地验证构建，仍待完成分发审查和干净机器测试。尚未公开发布二进制文件或 PyPI 包。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
 
 ## 参与贡献
 
@@ -88,7 +88,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 - [贡献指南](CONTRIBUTING.md) · [开发说明](docs/development.md) · [架构](docs/architecture.md)
 - [路线图](ROADMAP.md) · [安全问题报告](SECURITY.md)
 
-如果词脉对你有帮助，欢迎点一个 Star，让更多人发现它。
+遇到问题，直接[提 Issue](https://github.com/zzccchen/token-pulse/issues) 即可，中英文都可以。
 
 ## 许可证
 

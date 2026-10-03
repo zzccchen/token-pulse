@@ -9,7 +9,7 @@ TokenPulse's own code is licensed under [MIT](LICENSE). That does not change the
 - **PyInstaller.** The local EXE builder uses PyInstaller, which has an exception for distributing applications built with it. See its [license and exception](https://pyinstaller.org/en/stable/license.html). This does not replace the licenses of bundled dependencies.
 - Development tools retain their own licenses. They are not imported by the running application.
 
-The source archive and wheel do not bundle Qt or Python; installation resolves dependencies through the package manager. The Windows build script copies available runtime license files and package metadata into the executable and `dist/notices/`.
+The source archive and wheel do not bundle Qt or Python; installation resolves dependencies through the package manager. The Windows build script copies available runtime license files and package metadata into the executable and the versioned Windows ZIP.
 
 **Public EXE distribution has not been completed.** Existing wheel notices are not a complete distribution audit. Before publishing a frozen application, review all bundled components, applicable notices, corresponding-source obligations, and replacement/relinking arrangements under the selected licenses. The current build is for local validation and is unsigned.
 

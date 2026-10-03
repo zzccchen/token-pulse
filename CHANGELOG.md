@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Update both READMEs with the Codex development credit, supported Codex CLI 0.153.4–0.160.0 range, and issue reporting links.
+- Package local Windows builds as a versioned ZIP with dependency notices, runtime metadata, startup instructions, and SHA-256 checksums.
+- Use fresh notice staging and a configurable output directory so a running older EXE can remain in place.
+- Public binary distribution review and clean-machine validation remain pending.
+
 ## 0.1.0 — Initial public baseline
 
 - Read-only collection of supported local Codex session and diagnostic formats.

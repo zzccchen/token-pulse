@@ -49,7 +49,7 @@ uv sync --locked --group packaging
 uv run --locked --group packaging python scripts/build_windows.py
 ```
 
-This creates `dist/TokenPulse.exe` and `dist/notices/`. Notices are also embedded. The single-file GUI executable unpacks runtime dependencies to a temporary directory and opens no console. Use the source `token-pulse-cli` entry point for diagnostic output. The EXE shares the app data directory with a source installation; close existing instances before testing it.
+This creates `dist/windows/TokenPulse.exe`, a versioned Windows ZIP, and `SHA256SUMS.txt`. The ZIP includes dependency notices, `build-info.json` with runtime versions, and startup instructions. Notices are also embedded in the EXE. Only explicitly selected build files enter the ZIP; application data is not copied. Use `--output-dir <directory>` to choose a different destination, for example when a previous EXE is running. Each build uses fresh notice staging. The single-file GUI executable unpacks runtime dependencies to a temporary directory and opens no console. Use the source `token-pulse-cli` entry point for diagnostic output. The EXE shares the app data directory with a source installation; close existing instances before testing it.
 
 The EXE is not signed or offered as a supported download. Its full distribution review is separate from source publication; see [third-party notices](../THIRD_PARTY.md). No AppImage or PyPI release is currently provided.
 
