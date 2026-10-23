@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from token_pulse.domain import Context, Sample, reconcile
-from token_pulse.submissions import SubmittedTier
+from token_pulse.submissions import ConfigurationTag, SubmittedTier
 
 
 class History:
@@ -299,11 +299,19 @@ class History:
     def enrich_submissions(
         self, samples: list[Sample], submissions: dict[tuple[str, str], SubmittedTier]
     ) -> list[Sample]:
+        return self._enrich_tiers(samples, submissions, "submitted_tier", "submitted_tier_state")
+
+    def enrich_config_tags(
+        self, samples: list[Sample], tags: dict[tuple[str, str], ConfigurationTag]
+    ) -> list[Sample]:
+        return self._enrich_tiers(samples, tags, "config_tag_tier", "config_tag_state")
+
+    def _enrich_tiers(self, samples, settings, tier_field: str, state_field: str) -> list[Sample]:
         # History may outlive the collector's current 32 conversations. Match the
         # persisted anonymous task + turn, without needing to load old rollouts.
         indexed = {
             (self.anonymous_id("task", task), self.anonymous_id("turn", turn)): evidence
-            for (task, turn), evidence in submissions.items()
+            for (task, turn), evidence in settings.items()
         }
         result, changed = [], []
         for sample in samples:
@@ -314,8 +322,7 @@ class History:
                     sample,
                     context=replace(
                         sample.context,
-                        submitted_tier=evidence.tier,
-                        submitted_tier_state=evidence.state,
+                        **{tier_field: evidence.tier, state_field: evidence.state},
                     ),
                 )
             result.append(enriched)

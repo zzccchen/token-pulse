@@ -96,6 +96,9 @@ MESSAGES = {
     "其他 / 未记录": "Other / Unknown",
     "其他：{tier}（{evidence}）": "Other: {tier} ({evidence})",
     "Fast（{evidence}）": "Fast ({evidence})",
+    "Ultra Fast（{evidence}）": "Ultra Fast ({evidence})",
+    "Ultra Fast": "Ultra Fast",
+    "Fast": "Fast",
     "减少动态效果，直接显示交互结果": ("Reduce motion; show interaction results immediately"),
     "减少透明效果，提高表面与边界的清晰度": (
         "Reduce transparency for clearer surfaces and borders"
@@ -343,4 +346,9 @@ MESSAGES = {
         "Preview language changes immediately. Save to keep them, or Cancel to restore."
     ),
     "界面语言（覆盖已保存设置，仅本次运行有效）": "Language override for this run only",
+    "模式 / 依据": "Mode / evidence",
+    "配置标签": "configuration tag",
+    "回合配置标签": "Turn configuration tag",
+    "配置标签冲突，模式未知": "Conflicting configuration tags; mode unknown",
+    "旧版来源未核实，未采用": "Legacy provenance unverified; not used",
 }

@@ -88,7 +88,12 @@ class Monitor:
                     history.reject(list(rejected.values()), now=snapshot.at)
                     history.append(pending, now=snapshot.at)
                     historical = tuple(
-                        history.enrich_submissions(history.read(), collector.evidence.submissions)
+                        history.enrich_config_tags(
+                            history.enrich_submissions(
+                                history.read(), collector.evidence.submissions
+                            ),
+                            collector.evidence.config_tags,
+                        )
                     )
                     if collector.backfill.completed:
                         history.save_checkpoints(collector.backfill.completed, now=snapshot.at)

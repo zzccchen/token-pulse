@@ -52,10 +52,60 @@ def test_points_use_individual_rates_and_click_or_keyboard_open_exact_sample():
 
 
 @pytest.mark.parametrize(
+    "tier,mode", [("priority", "fast"), ("default", "standard"), ("ultrafast", "ultrafast")]
+)
+def test_configuration_fallback_is_labeled_and_never_confirmation(tier, mode):
+    ctx = Context(config_tag_tier=tier, config_tag_state="set")
+    sample = Sample("a", "b", "c", 100, 50, 99, ctx)
+    assert mode_info(sample)[0] == mode
+    assert "配置标签" in mode_info(sample)[1]
+    assert "配置标签" in sample_text(sample)
+    assert (
+        mode_info(replace(sample, context=replace(ctx, submitted_tier_state="unspecified")))[0]
+        == mode
+    )
+    assert (
+        mode_info(replace(sample, context=replace(ctx, submitted_tier_state="unverified")))[0]
+        == mode
+    )
+    for state in (None, "unspecified", "ambiguous"):
+        assert (
+            mode_info(replace(sample, context=replace(ctx, config_tag_state=state)))[0] == "other"
+        )
+    strong = replace(ctx, requested_tier="flex")
+    assert mode_info(replace(sample, context=strong)) == ("other", "其他：flex（请求值）")
+    strong = replace(ctx, submitted_tier="flex", submitted_tier_state="set")
+    assert mode_info(replace(sample, context=strong)) == ("other", "其他：flex（提交设置）")
+    strong = replace(ctx, submitted_tier_state="cleared")
+    assert mode_info(replace(sample, context=strong))[0] == "standard"
+    strong = replace(ctx, submitted_tier_state="ambiguous")
+    assert mode_info(replace(sample, context=strong)) == ("other", "模式证据冲突")
+    legacy = Context(submitted_tier="priority", submitted_tier_state="unverified")
+    assert mode_info(replace(sample, context=legacy))[0] == "other"
+
+
+@pytest.mark.parametrize(
     "context,expected",
     [
         (Context(submitted_tier="priority", submitted_tier_state="set"), "fast"),
         (Context(submitted_tier="fast", submitted_tier_state="set"), "fast"),
+        (Context(submitted_tier="ultrafast", submitted_tier_state="set"), "ultrafast"),
+        (Context(requested_tier="ultrafast"), "ultrafast"),
+        (
+            Context(
+                requested_tier="priority", submitted_tier="ultrafast", submitted_tier_state="set"
+            ),
+            "fast",
+        ),
+        (Context(configured_tier="ultrafast"), "other"),
+        (Context(actual_tier="ultrafast"), "other"),
+        (Context(submitted_tier="ultrafast", submitted_tier_state="ambiguous"), "other"),
+        (
+            Context(
+                requested_tier="default", submitted_tier="ultrafast", submitted_tier_state="set"
+            ),
+            "standard",
+        ),
         (Context(submitted_tier="default", submitted_tier_state="set"), "standard"),
         (Context(submitted_tier_state="cleared"), "standard"),
         (Context(submitted_tier_state="unspecified", configured_tier="priority"), "other"),
@@ -78,9 +128,9 @@ def test_mode_markers_use_request_or_submission_evidence_and_never_speed(context
     if context.requested_tier is not None:
         assert "请求值" in mode_info(sample)[1]
     if context.requested_tier is not None or context.submitted_tier_state in {"set", "cleared"}:
-        assert {"fast": "Fast", "standard": "普通", "other": "其他"}[expected] in sample_text(
-            sample
-        )
+        assert {"ultrafast": "Ultra Fast", "fast": "Fast", "standard": "普通", "other": "其他"}[
+            expected
+        ] in sample_text(sample)
     else:
         assert "模式冲突" in sample_text(sample) or "模式未知" in sample_text(sample)
 
@@ -110,8 +160,8 @@ def test_overlapping_samples_and_zero_tps_remain_individually_accessible():
     app = QApplication.instance() or QApplication([])
     chart = TimelineChart()
     chart.resize(380, 195)
-    one = Sample("a", "b", "c", 101, 0, 91)
-    two = replace(one, response_id="second")
+    one = Sample("a", "b", "c", 101, 0, 91, Context(requested_tier="priority"))
+    two = replace(one, response_id="second", context=Context(requested_tier="ultrafast"))
     chart.set_data(timeline([one, two], now=110, duration=60, step=30))
     chart.show()
     app.processEvents()
@@ -119,6 +169,45 @@ def test_overlapping_samples_and_zero_tps_remain_individually_accessible():
     assert chart.point_position(0).y() == chart.plot_rect().bottom()
     assert chart.hit_test(chart.point_position(0)) == 1
     chart.active = 1
+    chart.show_active()
+    assert "Ultra Fast" in chart.accessibleDescription()
     QTest.keyClick(chart, Qt.Key.Key_Left)
     assert chart.active == 0
+    assert "Ultra Fast" not in chart.accessibleDescription()
+    assert "Fast" in chart.accessibleDescription()
     chart.close()
+
+
+@pytest.mark.parametrize("width", [260, 330, 380])
+@pytest.mark.parametrize("language", ["en", "zh_CN"])
+def test_four_mode_legend_and_ultrafast_card_fit_narrow_chart(width, language):
+    from token_pulse.i18n import set_language
+
+    app = QApplication.instance() or QApplication([])
+    chart = TimelineChart()
+    try:
+        set_language(language)
+        chart.resize(width, 195)
+        sample = Sample("a", "b", "c", 101, 100, 91, Context(requested_tier="ultrafast"))
+        chart.set_data(timeline([sample], now=110, duration=60, step=30))
+        chart.show()
+        app.processEvents()
+        legend = chart.legend_layout()
+        assert {mode for _, mode, _ in legend} == {"ultrafast", "fast", "standard", "other"}
+        for index, (rect, _, _) in enumerate(legend):
+            assert chart.rect().contains(
+                rect.translated(0, chart.plot_rect().bottom() + 48).toRect()
+            )
+            assert all(not rect.intersects(other) for other, _, _ in legend[index + 1 :])
+        chart.active = 0
+        chart.show_active()
+        assert "Ultra Fast" in sample_text(sample)
+        assert chart.rect().contains(chart.card_rect(chart.point_position(0)).toRect())
+        assert not chart.grab().isNull()
+        set_language("zh_CN" if language == "en" else "en")
+        chart.retranslate_ui()
+        assert chart.active == 0
+        assert chart.point_position(0).y() == pytest.approx(chart.plot_rect().top())
+    finally:
+        chart.close()
+        set_language("zh_CN")

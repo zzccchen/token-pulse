@@ -167,7 +167,7 @@ def test_restart_reuses_committed_unchanged_source_without_reading_body(tmp_path
     history.close()
 
 
-@pytest.mark.parametrize("change", ["file", "evidence", "parser", "context"])
+@pytest.mark.parametrize("change", ["file", "evidence", "parser", "context", "config_tag"])
 def test_changed_source_or_evidence_replays_instead_of_trusting_checkpoint(
     tmp_path, monkeypatch, change
 ):
@@ -187,6 +187,10 @@ def test_changed_source_or_evidence_replays_instead_of_trusting_checkpoint(
         evidence.starts.clear()
     elif change == "parser":
         monkeypatch.setattr(module, "RECOVERY_REVISION", module.RECOVERY_REVISION + 1)
+    elif change == "config_tag":
+        from token_pulse.submissions import ConfigurationTag
+
+        evidence.config_tags["task", "turn"] = ConfigurationTag(NOW - 1, "priority", "set")
     else:
         context = Context(model="changed-fallback")
     second = Backfill()

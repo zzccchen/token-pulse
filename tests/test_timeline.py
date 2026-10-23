@@ -77,14 +77,15 @@ def test_cleared_override_has_standard_client_mode_and_keeps_raw_evidence():
     )
 
 
-def test_fast_aliases_share_client_mode_without_rewriting_raw_tiers():
+def test_client_modes_share_model_without_rewriting_raw_tiers():
     values = [
         sample("a", submitted_tier="priority", submitted_tier_state="set"),
         sample("b", submitted_tier="fast", submitted_tier_state="set"),
+        sample("c", submitted_tier="ultrafast", submitted_tier_state="set"),
     ]
     assert len(series(values)) == 1
     view = timeline(values, now=110, duration=60, step=30)
-    assert {s.context.submitted_tier for s in view.samples} == {"priority", "fast"}
+    assert {s.context.submitted_tier for s in view.samples} == {"priority", "fast", "ultrafast"}
 
 
 def test_bucket_boundaries_missing_data_future_and_repair():

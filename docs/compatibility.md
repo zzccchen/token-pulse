@@ -1,6 +1,6 @@
 # Compatibility and limits
 
-TokenPulse targets Windows and Linux. Supported Codex CLI versions: **0.153.4–0.160.0**. Internal Codex log formats are not a stable API.
+TokenPulse targets Windows and Linux. The original supported Codex CLI range is **0.153.4–0.160.0**; newer alpha session formats have received the bounded checks described below. Internal Codex log formats are not a stable API.
 
 ## Codex versions
 
@@ -14,6 +14,10 @@ TokenPulse targets Windows and Linux. Supported Codex CLI versions: **0.153.4–
 The bounded read-only diagnostic command found measurable outputs with both session-item and diagnostic-stream timing, with no reported source diagnostics in that run. This is not a complete recovery or exhaustive protocol-conformance test. Existing sessions may contain events from multiple client versions. No private logs or session identities are included here. Internal formats may change independently of desktop version numbers.
 
 Model names come from local evidence; there is no fixed supported-model list. Seeing a model in the dropdown does not establish timing coverage or server-side service tier.
+
+On 2026-10-22, a bounded local audit inspected eight recent sessions whose creation versions included `0.162.0-alpha.17.2`, `0.163.0-alpha.10.2`, and `0.163.0-alpha.11`. Reading these sessions from their beginnings inspected 707 usage records without a turn mismatch in that pass. A separate live-tail diagnostic can still exclude outputs when the preceding turn boundary is outside its read window; full historical recovery remains necessary. Creation versions do not identify every appended event's writer.
+
+The audit identified scoped `feedback_tags.tags_json.service_tier` tags that the older adapter missed. Version 0.1.4 adds conservative parsing, including the shorter sampling scope reported in [issue #3](https://github.com/zzccchen/token-pulse/issues/3), and stores tags separately from submissions, requests, and confirmation. The unpublished 0.1.2/0.1.3 local previews grouped them with submissions; that classification is corrected. This is local format evidence, not certification of every 0.161–0.163 build or every event type. No private logs, task identities, or content are included in fixtures. The reporter's retention observation does not establish a universal row limit; tags already rotated away can remain unknown.
 
 ## Platform evidence
 
@@ -43,7 +47,7 @@ Tray support depends on desktop protocols and extensions. Use `--no-tray` as a n
 | --- | --- | --- |
 | `state_*.sqlite / threads` | Indexed paths, recent task snapshots, model and provider context | Current settings cannot fill historical request values |
 | Session JSONL | Turn context, output items, usage, lifecycle events and state | Inherited history and repeated usage are not new output |
-| `logs_*.sqlite / logs` | Item starts, scoped submission settings, request/auth evidence, explicit ignored-tier warnings | Only known outer structures and event shapes are parsed |
+| `logs_*.sqlite / logs` | Item starts, scoped submissions and configuration tags, request/auth evidence, explicit ignored-tier warnings | Only known outer structures and event shapes are parsed |
 | `config.toml` | Current global `service_tier` snapshot | Does not resolve every project, task, or CLI override |
 
 Final server-confirmed tier extraction is not implemented. Old request/response formats observed in research do not establish evidence for current requests. See [measurement](measurement.md) and [source evidence](source-audit.md).

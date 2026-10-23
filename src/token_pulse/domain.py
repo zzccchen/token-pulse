@@ -19,6 +19,8 @@ class Context:
     actual_tier: str | None = None
     submitted_tier: str | None = None
     submitted_tier_state: str | None = None
+    config_tag_tier: str | None = None
+    config_tag_state: str | None = None
 
 
 @dataclass(frozen=True)
@@ -106,6 +108,9 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     evidence = (
         incoming.context if incoming.context.submitted_tier_state is not None else previous.context
     )
+    config_tag = (
+        incoming.context if incoming.context.config_tag_state is not None else previous.context
+    )
     return replace(
         base,
         context=replace(
@@ -116,6 +121,8 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
             actual_tier=base.context.actual_tier or previous.context.actual_tier,
             submitted_tier=evidence.submitted_tier,
             submitted_tier_state=evidence.submitted_tier_state,
+            config_tag_tier=config_tag.config_tag_tier,
+            config_tag_state=config_tag.config_tag_state,
         ),
     )
 

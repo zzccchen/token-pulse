@@ -28,8 +28,10 @@ def demo_snapshot() -> Snapshot:
             now - (19 - i) * 85 - 6 - 170 / rate,
             replace(
                 context,
-                submitted_tier="default" if i % 5 == 1 else None if i % 5 == 2 else "priority",
-                submitted_tier_state=None if i % 5 == 2 else "set",
+                submitted_tier=("priority", "default", None, None, "priority")[i % 5],
+                submitted_tier_state=None if i % 5 in {2, 3} else "set",
+                config_tag_tier="ultrafast" if i % 5 == 3 else None,
+                config_tag_state="set" if i % 5 == 3 else None,
             ),
             source="synthetic-demo",
         )

@@ -52,10 +52,38 @@ def test_submission_filter_and_columns_do_not_claim_wire_request_or_confirmation
     box = window.filters["submitted_tier"]
     box.setCurrentIndex(box.findData("priority"))
     assert window.filtered == [value]
-    assert window.table.item(0, 5).text() == "priority"
-    assert window.table.item(0, 6).text() == "未知"
-    assert window.table.item(0, 7).text() == "未确认"
+    assert window.table.item(0, 3).text() == "Fast（提交设置）"
+    assert window.table.item(0, 9).text() == "priority"
+    assert window.table.item(0, 11).text() == "未知"
+    assert window.table.item(0, 12).text() == "未确认"
     window.show()
     app.processEvents()
     assert not window.grab().isNull()
+    window.close()
+
+
+def test_history_configuration_mode_is_near_model_and_speed():
+    app = QApplication.instance() or QApplication([])
+    window = HistoryWindow()
+    base = demo_snapshot().samples[0]
+    value = replace(
+        base,
+        context=replace(
+            base.context,
+            requested_tier=None,
+            submitted_tier=None,
+            submitted_tier_state=None,
+            config_tag_tier="priority",
+            config_tag_state="set",
+        ),
+    )
+    window.apply([value])
+    assert window.table.item(0, 3).text() == "Fast（配置标签）"
+    assert float(window.table.item(0, 4).text()) == round(value.tps, 1)
+    assert window.table.item(0, 9).text() == "未记录"
+    assert window.table.item(0, 10).text() == "priority"
+    assert window.table.item(0, 11).text() == "未知"
+    assert window.table.item(0, 12).text() == "未确认"
+    window.show()
+    app.processEvents()
     window.close()

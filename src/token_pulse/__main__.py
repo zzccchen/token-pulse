@@ -71,6 +71,8 @@ def main() -> int:
                         for name in (
                             "submitted_tier",
                             "submitted_tier_state",
+                            "config_tag_tier",
+                            "config_tag_state",
                             "requested_tier",
                             "actual_tier",
                         )

@@ -21,7 +21,7 @@
 
 - **按模型查看。** 汇总跨对话的 30 分钟、1 天或 7 天观测，展示加权平均、中位数、范围与样本数。
 - **逐段输出轨迹。** 悬停散点查看时间和 token，点击打开匿名记录，键盘也能访问重叠点。
-- **有来源的模式标记。** 分别保留配置、提交设置、请求值和服务端确认值，缺失信息保持未知。
+- **有来源的模式标记。** 分别保留全局配置、回合配置标签、提交设置、请求值和服务端确认值，缺失信息保持未知。
 - **简洁托盘。** 可选显示均速数字；没有系统托盘时使用普通窗口。
 - **本地历史。** 筛选记录、导出 CSV，支持浅色与深色、减少视觉效果、中文与英文。
 
@@ -29,7 +29,7 @@
 
 ## 快速体验
 
-**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.1) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
+**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.4) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
 
 **从源码运行（Windows 或 Linux）：**需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
@@ -65,11 +65,11 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 这是**基于客户端日志的已完成输出估算**，并非实时 token 计数或严格性能基准。总输出 token 可能包含推理和生成的工具调用；生成前等待与工具执行不计入输出时长。
 
-无法可靠匹配 token 与计时边界时，记录仍然保留，但不计算 TPS。Fast 标记来自请求或提交设置，不能证明服务端实际优先处理。[完整测速规则 →](docs/measurement.md)
+无法可靠匹配 token 与计时边界时，记录仍然保留，但不计算 TPS。Ultra Fast 与 Fast 使用独立标记，优先依据请求或提交设置；使用回合配置标签回退显示时，会明确标注**配置标签**。这些标记不能证明服务端实际优先处理。[完整测速规则 →](docs/measurement.md)
 
 ## 当前状态与边界
 
-项目处于 **0.1.1** 早期阶段。支持版本：**Codex CLI 0.153.4–0.160.0**。内部日志格式可能变化，详见[兼容性说明](docs/compatibility.md#codex-versions)。
+项目处于 **0.1.4** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |

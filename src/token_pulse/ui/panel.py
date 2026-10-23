@@ -102,7 +102,17 @@ def submission_label(ctx: Context) -> str:
         "cleared": tr("普通（已清除层级覆盖）"),
         "unspecified": tr("未指定（不推断继承值）"),
         "ambiguous": tr("存在冲突，未采用"),
+        "unverified": tr("旧版来源未核实，未采用"),
     }.get(ctx.submitted_tier_state, tr("未记录"))
+
+
+def configuration_tag_label(ctx: Context) -> str:
+    if ctx.config_tag_state == "set" and ctx.config_tag_tier:
+        return ctx.config_tag_tier
+    return {
+        "unspecified": tr("未指定（不推断继承值）"),
+        "ambiguous": tr("存在冲突，未采用"),
+    }.get(ctx.config_tag_state, tr("未记录"))
 
 
 class Panel(QMainWindow):
@@ -511,6 +521,11 @@ class Panel(QMainWindow):
             (tr("接入渠道"), observed("provider", tr("未知"))),
             (tr("登录方式记录"), (login_text or tr("未记录")) + tr("；仅供追溯，不参与分组")),
             (tr("客户端提交层级"), submitted),
+            (
+                tr("回合配置标签"),
+                " / ".join(sorted({configuration_tag_label(value) for value in contexts}))
+                or tr("未记录"),
+            ),
             (tr("请求层级"), observed("requested_tier", tr("未记录：未获取请求层级证据"))),
             (tr("实际层级"), observed("actual_tier", tr("未获服务端确认"))),
             (tr("当前全局配置"), " / ".join(sorted(configs)) if configs else tr("无当前快照")),

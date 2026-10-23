@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.4 — Scoped configuration evidence and separate Ultra Fast display
+
+- Address [issue #3](https://github.com/zzccchen/token-pulse/issues/3), reported by @WildPickledPepper: accept bounded sampling configuration tags with exact task/turn matching, including the reported shorter trace shape.
+- Store configuration tags separately from submissions, outbound requests, and server confirmation. Use an explicitly labeled configuration fallback only when stronger evidence is absent; unset, missing, and conflicting evidence never implies Standard.
+- Show mode/evidence beside model and TPS in history and single-output records. Keep Ultra Fast distinct from Fast without splitting model statistics.
+- Enrich retained history through pseudonymized task/turn matches without changing output identity, tokens, timing, or TPS. Recovery revision 6 invalidates old checkpoints; missing logs cannot reconstruct deleted tags.
+- Correct the evidence classification in the unpublished 0.1.2/0.1.3 local previews. Existing public 0.1.1 history remains readable. No general support claim is made for all 0.162/0.163 builds.
+
+## 0.1.3 — Local preview, not published
+
+- Display `ultrafast` as Ultra Fast with an orange triangle, separate from the teal Fast diamond, in the timeline legend and hover cards. Preserve raw tier evidence and model-wide aggregation.
+- Wrap the four-mode legend on narrow charts and refresh plot coordinates when the language changes. Include Ultra Fast in synthetic previews and bilingual UI regression checks.
+
+## 0.1.2 — Local preview, not published
+
+- Recognize bounded, turn-scoped service-tier tags in diagnostic `feedback_tags.tags_json` records. This preview incorrectly grouped tags with submitted settings; 0.1.4 separates their provenance.
+- Re-evaluate historical recovery checkpoints for the new evidence source while preserving sample identity and valid speed measurements.
+- Classify explicit `ultrafast` request/settings evidence as Fast while retaining the original value in history and CSV.
+- Add synthetic regression coverage for scoped settings, conflicts, quoted content, truncated logs, replay, and measurement-preserving enrichment. Record bounded local checks of newer 0.162/0.163 alpha session formats without claiming support for all intervening versions.
+
 ## 0.1.1 — Windows portable preview
 
 - Update both READMEs with the Codex development credit, supported Codex CLI 0.153.4–0.160.0 range, and issue reporting links.

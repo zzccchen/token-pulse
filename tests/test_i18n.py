@@ -39,6 +39,26 @@ def test_system_resolution_and_missing_translation_fallback(monkeypatch):
     assert i18n.tr("unrecognized {name}", name="{literal}") == "unrecognized {literal}"
 
 
+def test_configuration_evidence_translates_and_retains_raw_values():
+    app = QApplication.instance() or QApplication([])
+    sample = demo_snapshot().samples[3]
+    window = HistoryWindow()
+    try:
+        i18n.set_language("zh_CN")
+        window.apply([sample])
+        assert window.table.item(0, 3).text() == "Ultra Fast（配置标签）"
+        i18n.set_language("en")
+        window.retranslate_ui()
+        assert window.table.item(0, 3).text() == "Ultra Fast (configuration tag)"
+        assert window.table.item(0, 10).text() == "ultrafast"
+        assert "configuration tag" in sample_text(sample)
+        assert window.table.item(0, 12).text() == "Unconfirmed"
+        app.processEvents()
+    finally:
+        window.close()
+        i18n.set_language("zh_CN")
+
+
 def test_catalog_covers_literal_messages_and_preserves_format_specs():
     root = Path(__file__).parents[1] / "src/token_pulse"
     messages = set()
@@ -145,8 +165,8 @@ def test_bilingual_views_keep_statistics_filters_and_exports_identical(tmp_path)
                 assert "Insufficient data" in history.summary.text()
                 assert mode_info(unknown)[0] == "other"
                 history.apply([unknown])
-                assert "Unspecified" in history.table.item(0, 5).text()
-                assert "Unconfirmed" == history.table.item(0, 7).text()
+                assert "Unspecified" in history.table.item(0, 9).text()
+                assert "Unconfirmed" == history.table.item(0, 12).text()
                 valid = next(s for s in snapshot.samples if s.tps is not None)
                 assert "total output tokens" in sample_text(valid)
                 panel.show_sample(valid)

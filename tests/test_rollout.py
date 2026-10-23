@@ -57,6 +57,57 @@ def test_exact_item_pairing_and_usage_are_required():
     assert parser.samples(evidence("another"))[0].tps is None
 
 
+def test_astra_ultrafast_request_survives_measurement_storage_and_export(tmp_path):
+    import csv
+
+    from token_pulse.history import History, export_csv
+
+    parser = ready()
+    event(
+        parser,
+        "turn_context",
+        {"turn_id": "turn", "model": "gpt-6-astra", "effort": "ultra"},
+        0,
+    )
+    logs = LogEvidence()
+    logs.accept(
+        "task",
+        1767225609,
+        "feedback_tags",
+        "turn{turn.id=turn}:stream_request{"
+        "model=gpt-6-astra service_tier=ultrafast}: auth_mode=Chatgpt",
+    )
+    logs.accept(
+        "task",
+        1767225610,
+        "codex_core::stream_events_utils",
+        'turn{turn.id=turn}:sampling: Output item item_type="message" item_id="item"',
+    )
+    output(parser)
+    usage(parser)
+    measured = parser.samples(logs)[0]
+    assert measured.tps == 50
+    assert measured.context.model == "gpt-6-astra"
+    assert measured.context.effort == "ultra"
+    assert measured.context.requested_tier == "ultrafast"
+    assert measured.context.actual_tier is None
+    history = History(tmp_path / "history.sqlite")
+    try:
+        history.append([measured, measured], now=1767225620)
+        saved = history.read()
+        assert len(saved) == 1
+        assert saved[0].context == measured.context
+        assert saved[0].tps == 50
+        path = tmp_path / "history.csv"
+        export_csv(path, saved)
+        with path.open(encoding="utf-8-sig", newline="") as stream:
+            row = next(csv.DictReader(stream))
+        assert row["requested_tier"] == "ultrafast"
+        assert row["actual_tier"] == ""
+    finally:
+        history.close()
+
+
 def test_submitted_tier_requires_exact_turn_and_preceding_timestamp():
     from token_pulse.submissions import SubmittedTier
 
@@ -75,6 +126,42 @@ def test_submitted_tier_requires_exact_turn_and_preceding_timestamp():
     assert sample.context.actual_tier is None
     assert sample.tps is None  # Submission isn't an output start marker.
     assert parser.task(logs).context.submitted_tier == "priority"
+
+
+def test_scoped_feedback_enriches_existing_measurement_without_changing_timing(tmp_path):
+    from test_submissions import feedback_body
+
+    from token_pulse.history import History
+
+    parser = ready()
+    output(parser)
+    usage(parser)
+    logs = evidence()
+    original = parser.samples(logs)[0]
+    logs.accept("task", 1767225609, "feedback_tags", feedback_body(turn="other"))
+    assert parser.samples(logs)[0].context.config_tag_tier is None
+    logs.accept("task", 1767225620, "feedback_tags", feedback_body())
+    # Future settings cannot backfill.
+    assert parser.samples(logs)[0].context.config_tag_tier is None
+    logs.accept("task", 1767225609, "feedback_tags", feedback_body())
+    enriched = parser.samples(logs)[0]
+    assert enriched.key == original.key
+    assert enriched.tps == original.tps == 50
+    assert enriched.context.config_tag_tier == "ultrafast"
+    assert enriched.context.submitted_tier is None
+    assert enriched.context.submitted_tier_state is None
+    assert enriched.context.requested_tier == "priority"
+    assert enriched.context.actual_tier is None
+    history = History(tmp_path / "history.sqlite")
+    try:
+        history.append([original], now=1767225620)
+        history.append([enriched], now=1767225620)
+        saved = history.read()
+        assert len(saved) == 1
+        assert saved[0].tps == 50
+        assert saved[0].context == enriched.context
+    finally:
+        history.close()
 
 
 def test_model_switch_keeps_each_completed_output_model():

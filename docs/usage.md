@@ -18,7 +18,7 @@ The large number is a duration-weighted average of valid completed outputs. The 
 
 Each point is one completed output. Hover for time, mode, TPS, tokens, and duration. Click to inspect its anonymous record. Left/Right moves between points, Home/End selects the first/last, Enter opens a record, and Escape clears highlighting. Keyboard navigation reaches overlapping points.
 
-Fast, Standard, and other/unrecorded markers use shape and color. Request evidence takes precedence over submitted settings. Labels do not establish server execution tier. See [measurement](measurement.md).
+Ultra Fast, Fast, Standard, and other/unrecorded markers use distinct shapes and colors. `ultrafast` appears as an orange triangle, separate from the teal Fast diamond; all modes remain combined in the selected model's statistics. The legend wraps on narrow charts. Request evidence takes precedence over submitted settings. With neither available, a scoped configuration tag may supply a fallback explicitly labeled **configuration tag** in the hover card and history. The history table places mode/evidence next to model and TPS; raw configuration, submission, request, and confirmation stay separate. Missing, unset, or conflicting tags do not imply Standard. Labels do not establish server execution tier. See [measurement](measurement.md).
 
 Recent state uses evidence no older than 120 seconds. Older observations do not prove a task is still generating, idle, or failing. The latest output becomes stale after 60 seconds, independently of state; the selected-window average remains available.
 

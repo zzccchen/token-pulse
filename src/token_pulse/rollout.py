@@ -476,11 +476,14 @@ class Rollout:
     def _submitted(self, context: Context, turn: str, at: float, evidence: LogEvidence) -> Context:
         submitted = evidence.submissions.get((self.task_id, turn))
         if submitted is not None and submitted.at <= at + 0.001:
-            return replace(
+            context = replace(
                 context,
                 submitted_tier=submitted.tier,
                 submitted_tier_state=submitted.state,
             )
+        tag = evidence.config_tags.get((self.task_id, turn))
+        if tag is not None and tag.at <= at + 0.001:
+            context = replace(context, config_tag_tier=tag.tier, config_tag_state=tag.state)
         return context
 
     def task(self, evidence: LogEvidence) -> Task:
