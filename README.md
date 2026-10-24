@@ -29,7 +29,7 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
-**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.4), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
+**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.5), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
 
 **From source (Windows or Linux):** you need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
@@ -69,7 +69,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.5 development** project; the latest published preview is **0.1.4**. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
+TokenPulse is an early **0.1.5** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
 
 | Environment | Validation scope |
 | --- | --- |

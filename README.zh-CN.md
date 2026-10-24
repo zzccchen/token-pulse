@@ -29,7 +29,7 @@
 
 ## 快速体验
 
-**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.4) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
+**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.5) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
 
 **从源码运行（Windows 或 Linux）：**需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
@@ -69,7 +69,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 ## 当前状态与边界
 
-项目处于 **0.1.5 开发**阶段，最新公开预览版为 **0.1.4**。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
+项目处于 **0.1.5** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |

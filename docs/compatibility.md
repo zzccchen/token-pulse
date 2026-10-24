@@ -19,6 +19,8 @@ On 2026-10-22, a bounded local audit inspected eight recent sessions whose creat
 
 The audit identified scoped `feedback_tags.tags_json.service_tier` tags that the older adapter missed. Version 0.1.4 adds conservative parsing, including the shorter sampling scope reported in [issue #3](https://github.com/zzccchen/token-pulse/issues/3), and stores tags separately from submissions, requests, and confirmation. The unpublished 0.1.2/0.1.3 local previews grouped them with submissions; that classification is corrected. This is local format evidence, not certification of every 0.161–0.163 build or every event type. No private logs, task identities, or content are included in fixtures. The reporter's retention observation does not establish a universal row limit; tags already rotated away can remain unknown.
 
+Version 0.1.5 additionally accepts a terminal, unquoted absolute `cwd` containing spaces on a recognized sampling span. Such paths previously caused the whole configuration-tag record to be rejected. The directory is ignored, while task/turn matching remains strict and ambiguous field-like path content is rejected. Recovery revision 7 rechecks retained evidence without changing measurement timing. Other unsupported diagnostic structures still remain unknown; see [source evidence](source-audit.md).
+
 ## Platform evidence
 
 | Environment | Recorded validation | Not established |
