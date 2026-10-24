@@ -128,8 +128,17 @@ def test_submitted_tier_requires_exact_turn_and_preceding_timestamp():
     assert parser.task(logs).context.submitted_tier == "priority"
 
 
-def test_scoped_feedback_enriches_existing_measurement_without_changing_timing(tmp_path):
-    from test_submissions import feedback_body
+@pytest.mark.parametrize("display_path", [False, True])
+def test_scoped_feedback_enriches_existing_measurement_without_changing_timing(
+    tmp_path, display_path
+):
+    from test_submissions import feedback_body as original_body
+
+    def feedback_body(**kwargs):
+        value = original_body(**kwargs)
+        return (
+            value.replace('cwd="/demo"', r"cwd=C:\demo\Project Folder") if display_path else value
+        )
 
     from token_pulse.history import History
 

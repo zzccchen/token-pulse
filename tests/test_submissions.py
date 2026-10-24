@@ -160,6 +160,39 @@ def test_turn_feedback_quoted_content_cannot_supply_scope_or_tiers():
     assert feedback_tier("task", 10, forged) is None
 
 
+@pytest.mark.parametrize(
+    "cwd", [r"C:\demo\Project Folder", "/demo/Project Folder", r"\\demo\share\Project Folder"]
+)
+def test_sampling_display_path_with_spaces_does_not_hide_ultrafast_tag(cwd):
+    message = feedback_body().replace('cwd="/demo"', f"cwd={cwd}")
+    turn, tag = feedback_tier("task", 10, message)
+    assert (turn, tag.tier, tag.state) == ("turn", "ultrafast", "set")
+    logs = LogEvidence()
+    logs.accept("task", 10, "feedback_tags", message)
+    assert logs.config_tags["task", "turn"] == tag
+    assert not logs.submissions and not logs.requests
+    assert cwd not in repr(logs.__dict__)
+    assert feedback_tier("other", 10, message) is None
+    assert feedback_tier("task", 10, message.replace("turn_id=turn", "turn_id=other", 1)) is None
+
+
+@pytest.mark.parametrize(
+    "cwd",
+    [
+        r"C:\demo\Project Folder turn_id=other",
+        r"C:\demo\Project Folder turn_id=turn",
+        r"C:\demo\Project Folder thread.id=other",
+        r"C:\demo\Project Folder cwd=other",
+        "relative unquoted path",
+        "C:\\demo\\Project\nFolder",
+    ],
+)
+def test_display_path_never_supplies_or_hides_identity_fields(cwd):
+    message = feedback_body().replace('cwd="/demo"', f"cwd={cwd}")
+    assert feedback_tier("task", 10, message) is None
+    assert feedback_tier("task", 10, message.replace("turn_id=turn", "ignored=none")) is None
+
+
 def test_turn_feedback_is_scoped_and_independent_of_submissions():
     logs = LogEvidence(capacity=2)
     logs.accept("task", 9, "codex_core::session::handlers", body())

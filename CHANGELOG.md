@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 — Unreleased
+
+- Recognize scoped configuration tags when a sampling span ends with an unquoted absolute working directory containing spaces. Ignore the directory value; keep exact task/turn matching and reject ambiguous field-like path content.
+- Bump recovery revision to 7 so retained outputs can gain the previously missed tags without changing tokens, timing, or TPS. Configuration tags remain separate from submitted settings, requests, and server confirmation.
+
 ## 0.1.4 — Scoped configuration evidence and separate Ultra Fast display
 
 - Address [issue #3](https://github.com/zzccchen/token-pulse/issues/3), reported by @WildPickledPepper: accept bounded sampling configuration tags with exact task/turn matching, including the reported shorter trace shape.

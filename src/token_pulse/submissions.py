@@ -26,10 +26,24 @@ _TRACE_FIELD = re.compile(r'([\w.]+)=("(?:[^"\\]|\\.)*"|[^\s{}"]+)(?:\s+|$)')
 _TAGS_MARKER = re.compile(r'"(?:[^"\\]|\\.)*"|(?P<tags> tags_json=)')
 
 
-def _trace_fields(raw: str) -> dict[str, str]:
+def _trace_fields(raw: str, *, display_cwd: bool = False) -> dict[str, str]:
     fields = {}
     position = 0
     while position < len(raw):
+        # Path Display formatting can leave a terminal cwd unquoted, including
+        # spaces. It supplies no identity evidence. Reject field-like content
+        # instead of interpreting parts of a path as thread/turn fields.
+        if display_cwd and raw.startswith("cwd=", position):
+            value = raw[position + 4 :].rstrip()
+            if not value.startswith('"'):
+                if (
+                    "cwd" in fields
+                    or not re.match(r"(?:[A-Za-z]:[\\/]|/|\\\\)", value)
+                    or re.search(r'[="{}\r\n]', value)
+                ):
+                    raise ValueError("Ambiguous Display path")
+                fields["cwd"] = ""  # The path is not needed or retained.
+                return fields
         match = _TRACE_FIELD.match(raw, position)
         if not match or match[1] in fields:
             raise ValueError("Unsupported tracing fields")
@@ -68,7 +82,10 @@ def feedback_tier(task: str, at: float, body: str) -> tuple[str, ConfigurationTa
             gap = prefix[position : match.start()]
             if not re.fullmatch(r"(?::?[\w.]+:)*:?", gap) or match[1] in spans:
                 return None
-            spans[match[1]] = _trace_fields(match[2])
+            spans[match[1]] = _trace_fields(
+                match[2],
+                display_cwd=match[1] in {"run_sampling_request", "try_run_sampling_request"},
+            )
             position = match.end()
         if position != len(prefix) or not prefix.startswith("session_loop{"):
             return None
