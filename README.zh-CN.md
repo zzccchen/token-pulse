@@ -1,8 +1,8 @@
 # TokenPulse · 词脉
 
-**一眼看清本机 Codex 的输出速度。**
+**由 Codex 开发的本地 Codex 输出速度监视器。**
 
-面向 Windows 和 Linux 的本地只读托盘监视器。选择模型，查看跨对话的已完成输出速度，观测数据留在自己的电脑上。
+词脉是面向 Windows 和 Linux 的只读托盘应用。选择模型和时间范围，查看跨对话的输出速度。它读取本机 Codex 日志，历史记录留在自己的电脑上。
 
 [![检查](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml)
 [![MIT 许可证](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -21,7 +21,7 @@
 
 - **按模型查看。** 汇总跨对话的 30 分钟、1 天或 7 天观测，展示加权平均、中位数、范围与样本数。
 - **逐段输出轨迹。** 悬停散点查看时间和 token，点击打开匿名记录，键盘也能访问重叠点。
-- **有来源的模式标记。** 分别保留配置、提交设置、请求值和服务端确认值，缺失信息保持未知。
+- **有来源的模式标记。** 分别保留全局配置、回合配置标签、提交设置、请求值和服务端确认值，缺失信息保持未知。
 - **简洁托盘。** 可选显示均速数字；没有系统托盘时使用普通窗口。
 - **本地历史。** 筛选记录、导出 CSV，支持浅色与深色、减少视觉效果、中文与英文。
 
@@ -29,7 +29,9 @@
 
 ## 快速体验
 
-需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
+**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.5) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
+
+**从源码运行（Windows 或 Linux）：**需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
 ```sh
 git clone https://github.com/zzccchen/token-pulse.git
@@ -63,11 +65,11 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 这是**基于客户端日志的已完成输出估算**，并非实时 token 计数或严格性能基准。总输出 token 可能包含推理和生成的工具调用；生成前等待与工具执行不计入输出时长。
 
-无法可靠匹配 token 与计时边界时，记录仍然保留，但不计算 TPS。Fast 标记来自请求或提交设置，不能证明服务端实际优先处理。[完整测速规则 →](docs/measurement.md)
+无法可靠匹配 token 与计时边界时，记录仍然保留，但不计算 TPS。Ultra Fast 与 Fast 使用独立标记，优先依据请求或提交设置；使用回合配置标签回退显示时，会明确标注**配置标签**。这些标记不能证明服务端实际优先处理。[完整测速规则 →](docs/measurement.md)
 
 ## 当前状态与边界
 
-项目处于 **0.1.0** 早期阶段，当前适配已观测的 **Codex 0.153.4 系列本地日志格式**；这些内部格式可能变化。
+项目处于 **0.1.5** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |
@@ -77,7 +79,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 日志缺失或轮转可能造成数据空缺。当前尚未读取最终服务端确认层级。远程主机、其他客户端、费用统计和修改 Codex 设置不在当前范围内。
 
-目前请从源码运行。可以本地构建 Python 包和 Windows EXE；尚未发布到 PyPI，也没有正式提供可下载的 EXE。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
+Windows 便携包附带依赖许可说明、对应 Qt/PySide 源码和 SHA-256 校验值。干净 Windows 机器测试仍待完成。尚未发布 PyPI 包或 Linux 二进制文件。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
 
 ## 参与贡献
 
@@ -88,7 +90,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 - [贡献指南](CONTRIBUTING.md) · [开发说明](docs/development.md) · [架构](docs/architecture.md)
 - [路线图](ROADMAP.md) · [安全问题报告](SECURITY.md)
 
-如果词脉对你有帮助，欢迎点一个 Star，让更多人发现它。
+遇到问题，直接[提 Issue](https://github.com/zzccchen/token-pulse/issues) 即可，中英文都可以。
 
 ## 许可证
 

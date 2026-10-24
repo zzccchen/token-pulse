@@ -1,6 +1,6 @@
 # Codex source evidence
 
-This is a version-scoped adapter reference, not a promise about future Codex formats. The project was developed against observed 0.153.4-series local logs. Earlier source review used the public `rust-v0.153.0` implementation. A session's creation version need not match every later appended event.
+This is a version-scoped adapter reference, not a promise about future Codex formats. The project was developed against observed 0.153.4-series local logs. The supported Codex CLI range is 0.153.4–0.160.0; see [compatibility](compatibility.md#codex-versions) for details. Earlier source review used the public `rust-v0.153.0` implementation. A session's creation version need not match every later appended event.
 
 ## Source relationships
 
@@ -34,6 +34,14 @@ Historical references: [turn processing](https://github.com/openai/codex/blob/ru
 The adapter recognizes bounded outer `TurnInput.request.thread_settings.service_tier` evidence for supported Start / StartOrSteer submissions. Thread identity and submission/turn identity must match. Standalone settings changes and agent messages do not automatically apply to an unrelated output.
 
 The parser distinguishes clear, unspecified, explicit, and conflicting states. It handles nested delimiters and escaped strings while skipping user text. Truncation, duplicate fields, excessive depth, conflicting records, and unsupported nonempty overrides are not guessed away. See `tests/test_submissions.py` and `tests/test_logs.py`.
+
+Newer diagnostic `feedback_tags` records can place the client service tier in the outer `tags_json.service_tier` string. This adapter requires `session_loop.thread_id` to match the database task, a recognized `turn` or `codex.turn_input` span with `turn.id`, and a matching `try_run_sampling_request` or `run_sampling_request` span with `turn_id`. Any additional thread/turn fields must agree. Quoted strings cannot supply scope fields. Parsing is bounded to 16,000 characters. Duplicate fields, invalid JSON, absent/null tiers, and nested tier-like content provide no tag. Contradictory tags for the same task and turn remain ambiguous.
+
+These tags have a separate configuration-evidence category. They are neither submitted settings, outbound request values, nor server confirmation. Unscoped `thread_settings_applied` events do not identify a turn and are not used to fill its tier. Recovery revision 6 invalidates previous checkpoints to enrich retained samples from scoped feedback without changing the measurement parser revision or timing rules. The public 0.1.1 format remains readable; 0.1.2/0.1.3 were unpublished local previews whose tag/submission classification required correction.
+
+Recovery revision 7 also handles a terminal `cwd` on recognized sampling spans when Path Display formatting leaves an absolute path containing spaces unquoted. The directory contributes no identity evidence and is not retained. Field-like content, embedded quotes/braces/newlines, and nonterminal ambiguous paths are rejected; every observed task/turn field still has to agree. This does not relax parsing of unrelated structured diagnostic values.
+
+The source review on 2026-10-22 used [sampling feedback emission](https://github.com/openai/codex/blob/86e17e98c7f901277aeeb4649cf1b01462b082f2/codex-rs/core/src/session/turn.rs) and the [scalar feedback tag builder](https://github.com/openai/codex/blob/86e17e98c7f901277aeeb4649cf1b01462b082f2/codex-rs/core/src/feedback_config.rs). The tier comes from the sampling step's settings. The builder represents an absent value as `unset`; the adapter retains that as unspecified, not as a clear instruction or explicit Standard setting. This source reference explains the interpretation and is not a claim that the installed binary was built from that commit.
 
 A display marker prefers request evidence, otherwise supported submitted settings. Source attribution and raw values remain in record details. The current adapter does not extract final server-confirmed tiers. Global configuration cannot fill historical request values.
 

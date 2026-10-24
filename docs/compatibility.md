@@ -1,6 +1,25 @@
 # Compatibility and limits
 
-TokenPulse targets Windows and Linux. Internal Codex log formats are not a stable API; the current adapter targets observed 0.153.4-series formats and associated synthetic fixtures. No claim is made for all Codex versions.
+TokenPulse targets Windows and Linux. The original supported Codex CLI range is **0.153.4–0.160.0**; newer alpha session formats have received the bounded checks described below. Internal Codex log formats are not a stable API.
+
+## Codex versions
+
+| Component | Evidence recorded on 2026-10-03 | Scope |
+| --- | --- | --- |
+| Codex CLI 0.153.4–0.160.0 | Supported version range | Local session and diagnostic log collection |
+| Standalone Codex CLI 0.153.4 | Local `codex --version`; original parser fixtures | Original parser baseline; standalone installation remains at this version |
+| Codex desktop 26.930.3930.0 (Windows package) | Installed package metadata | Desktop package version, not the log protocol version |
+| Desktop-bundled Codex CLI 0.160.0 | Bundled executable `--version` | Present in the environment used for the collection check |
+
+The bounded read-only diagnostic command found measurable outputs with both session-item and diagnostic-stream timing, with no reported source diagnostics in that run. This is not a complete recovery or exhaustive protocol-conformance test. Existing sessions may contain events from multiple client versions. No private logs or session identities are included here. Internal formats may change independently of desktop version numbers.
+
+Model names come from local evidence; there is no fixed supported-model list. Seeing a model in the dropdown does not establish timing coverage or server-side service tier.
+
+On 2026-10-22, a bounded local audit inspected eight recent sessions whose creation versions included `0.162.0-alpha.17.2`, `0.163.0-alpha.10.2`, and `0.163.0-alpha.11`. Reading these sessions from their beginnings inspected 707 usage records without a turn mismatch in that pass. A separate live-tail diagnostic can still exclude outputs when the preceding turn boundary is outside its read window; full historical recovery remains necessary. Creation versions do not identify every appended event's writer.
+
+The audit identified scoped `feedback_tags.tags_json.service_tier` tags that the older adapter missed. Version 0.1.4 adds conservative parsing, including the shorter sampling scope reported in [issue #3](https://github.com/zzccchen/token-pulse/issues/3), and stores tags separately from submissions, requests, and confirmation. The unpublished 0.1.2/0.1.3 local previews grouped them with submissions; that classification is corrected. This is local format evidence, not certification of every 0.161–0.163 build or every event type. No private logs, task identities, or content are included in fixtures. The reporter's retention observation does not establish a universal row limit; tags already rotated away can remain unknown.
+
+Version 0.1.5 additionally accepts a terminal, unquoted absolute `cwd` containing spaces on a recognized sampling span. Such paths previously caused the whole configuration-tag record to be rejected. The directory is ignored, while task/turn matching remains strict and ambiguous field-like path content is rejected. Recovery revision 7 rechecks retained evidence without changing measurement timing. Other unsupported diagnostic structures still remain unknown; see [source evidence](source-audit.md).
 
 ## Platform evidence
 
@@ -14,6 +33,10 @@ The native Windows and WSL observations above were recorded during development o
 
 A Windows publication-preparation run on 2026-09-21 passed 205 offline tests and Ruff checks. Test counts describe that run, not a permanent project promise.
 
+On 2026-10-03, 205 offline tests, Ruff, formatting, and local documentation-link checks passed. A fresh Windows x64 ZIP (Python 3.13.7, Qt 6.11.2, PyInstaller 6.22.2) passed archive integrity, selected-content, and SHA-256 checks. The extracted EXE started and exited successfully in isolated demo smoke tests with normal-window, tray, and hidden-start options, using a restricted PATH outside the source tree. These automated startup checks do not establish manual tray interaction, a clean-machine installation, signing, or completed binary distribution review.
+
+The subsequent 0.1.1 portable-build preparation on the same date passed 218 offline tests, including notice extraction, missing-license rejection, source-hash verification, and Qt component selection checks. The directory-based ZIP passed all three isolated native startup/exit modes with a restricted PATH. A separate offscreen process-module check confirmed loading Qt Core, Gui, and Widgets DLLs from the portable directory. Matching Qt/PySide sources and notices are included as described in [Windows distribution](windows-distribution.md). Clean-machine validation and signing remain outside these checks.
+
 ## Linux runtime
 
 CI installs `libegl1`, `libopengl0`, and `libxkbcommon0` on Ubuntu. Real X11/Wayland platform plugins may need additional desktop-specific libraries; inspect Qt's load error for the target distribution. The locked x86-64 Linux Qt wheel uses `manylinux_2_34`; older glibc systems are outside the recorded validation.
@@ -26,7 +49,7 @@ Tray support depends on desktop protocols and extensions. Use `--no-tray` as a n
 | --- | --- | --- |
 | `state_*.sqlite / threads` | Indexed paths, recent task snapshots, model and provider context | Current settings cannot fill historical request values |
 | Session JSONL | Turn context, output items, usage, lifecycle events and state | Inherited history and repeated usage are not new output |
-| `logs_*.sqlite / logs` | Item starts, scoped submission settings, request/auth evidence, explicit ignored-tier warnings | Only known outer structures and event shapes are parsed |
+| `logs_*.sqlite / logs` | Item starts, scoped submissions and configuration tags, request/auth evidence, explicit ignored-tier warnings | Only known outer structures and event shapes are parsed |
 | `config.toml` | Current global `service_tier` snapshot | Does not resolve every project, task, or CLI override |
 
 Final server-confirmed tier extraction is not implemented. Old request/response formats observed in research do not establish evidence for current requests. See [measurement](measurement.md) and [source evidence](source-audit.md).

@@ -242,6 +242,54 @@ def test_old_context_json_remains_readable_and_csv_separates_tier_sources(tmp_pa
     history.close()
 
 
+def test_config_tag_enrichment_preserves_measurements_and_independent_sources(tmp_path):
+    from token_pulse.submissions import ConfigurationTag
+
+    history = History(tmp_path / "history.sqlite")
+    base = sample(context=Context(submitted_tier="default", submitted_tier_state="set"))
+    history.append([base, replace(base, turn_id="other"), replace(base, task_id="other")], now=110)
+    before = history.read()
+    key = base.task_id, base.turn_id
+    # A future tag cannot label an earlier completed output.
+    assert (
+        history.enrich_config_tags(before, {key: ConfigurationTag(103, "priority", "set")})
+        == before
+    )
+    mapping = {key: ConfigurationTag(99, "priority", "set")}
+    enriched = history.enrich_config_tags(before, mapping)
+    assert len(enriched) == len(before) == 3
+    for old, new in zip(before, enriched, strict=True):
+        assert replace(new, context=old.context) == old
+        assert new.tps == old.tps == 50
+        assert new.context.submitted_tier == "default"
+        assert new.context.requested_tier is new.context.actual_tier is None
+    assert sum(s.context.config_tag_tier == "priority" for s in enriched) == 1
+    assert history.enrich_config_tags(enriched, mapping) == enriched
+    assert history.enrich_config_tags(enriched, {}) == enriched
+    history.append([replace(base, started_at=None)], now=111)
+    assert history.read() == enriched
+    export_csv(tmp_path / "tags.csv", enriched)
+    rows = list(
+        csv.DictReader((tmp_path / "tags.csv").read_text(encoding="utf-8-sig").splitlines())
+    )
+    assert sum(row["config_tag_tier"] == "priority" for row in rows) == 1
+    assert all(row["submitted_tier"] == "default" for row in rows)
+    assert "PRIVATE" not in (tmp_path / "tags.csv").read_text(encoding="utf-8-sig")
+    mapping[key] = ConfigurationTag(99, None, "ambiguous")
+    updated = history.enrich_config_tags(enriched, mapping)
+    assert sum(s.context.config_tag_state == "ambiguous" for s in updated) == 1
+    assert all(s.tps == 50 for s in updated)
+    history.close()
+    history = History(tmp_path / "history.sqlite")
+    assert history.read() == updated
+    history.connection.execute(
+        "UPDATE samples SET payload=json_remove(payload,'$.context.config_tag_tier',"
+        "'$.context.config_tag_state')"
+    )
+    assert all(s.context.config_tag_state is None for s in history.read())
+    history.close()
+
+
 @pytest.mark.parametrize("issue", ["unconfirmed_tool_start", "unconfirmed_initial_span"])
 def test_new_boundary_withdrawal_replaces_old_speed_and_survives_old_batches(tmp_path, issue):
     path = tmp_path / "history.sqlite"

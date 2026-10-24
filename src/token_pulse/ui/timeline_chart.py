@@ -15,6 +15,13 @@ from token_pulse.i18n import tr
 from token_pulse.timeline import Timeline
 from token_pulse.ui.theme import colors
 
+MODE_COLORS = {
+    "ultrafast": "chart_ultrafast",
+    "fast": "accent",
+    "standard": "chart_standard",
+    "other": "muted",
+}
+
 
 def mode_info(sample: Sample) -> tuple[str, str]:
     ctx = sample.context
@@ -26,8 +33,14 @@ def mode_info(sample: Sample) -> tuple[str, str]:
         tier, evidence = ctx.submitted_tier, tr("提交设置")
     elif ctx.submitted_tier_state == "ambiguous":
         return "other", tr("模式证据冲突")
+    elif ctx.config_tag_state == "ambiguous":
+        return "other", tr("配置标签冲突，模式未知")
+    elif ctx.config_tag_state == "set" and ctx.config_tag_tier:
+        tier, evidence = ctx.config_tag_tier, tr("配置标签")
     else:
-        return "other", tr("模式未记录或未明确指定")
+        return "other", tr("模式未知")
+    if tier == "ultrafast":
+        return "ultrafast", tr("Ultra Fast（{evidence}）", evidence=evidence)
     if tier in {"priority", "fast"}:
         return "fast", tr("Fast（{evidence}）", evidence=evidence)
     if tier == "default":
@@ -36,7 +49,12 @@ def mode_info(sample: Sample) -> tuple[str, str]:
 
 
 def mode_caption(sample: Sample) -> str:
-    mode = {"fast": "Fast", "standard": tr("普通"), "other": tr("其他")}[mode_info(sample)[0]]
+    mode = {
+        "ultrafast": tr("Ultra Fast"),
+        "fast": tr("Fast"),
+        "standard": tr("普通"),
+        "other": tr("其他"),
+    }[mode_info(sample)[0]]
     ctx = sample.context
     if ctx.requested_tier is not None:
         return mode
@@ -44,6 +62,10 @@ def mode_caption(sample: Sample) -> str:
         ctx.submitted_tier_state == "set" and ctx.submitted_tier
     ):
         return mode
+    if ctx.submitted_tier_state != "ambiguous" and ctx.config_tag_state == "set":
+        return mode_info(sample)[1]
+    if ctx.config_tag_state == "ambiguous":
+        return tr("模式冲突")
     return tr("模式冲突") if ctx.submitted_tier_state == "ambiguous" else tr("模式未知")
 
 
@@ -82,6 +104,7 @@ class TimelineChart(QWidget):
         self.setAccessibleDescription(tr(self.DESCRIPTION))
 
     def retranslate_ui(self) -> None:
+        self._positions = None  # Translated legend widths can change the plot height.
         self.setAccessibleName(tr("输出速度时间散点图"))
         self.setAccessibleDescription(
             sample_text(self.points[self.active])
@@ -109,7 +132,27 @@ class TimelineChart(QWidget):
         self.update()
 
     def plot_rect(self) -> QRectF:
-        return QRectF(34, 12, max(1, self.width() - 42), max(1, self.height() - 80))
+        extra_height = max(rect.top() for rect, _, _ in self.legend_layout())
+        return QRectF(34, 12, max(1, self.width() - 42), max(1, self.height() - 80 - extra_height))
+
+    def legend_layout(self) -> list[tuple[QRectF, str, str]]:
+        font = self.font()
+        font.setPixelSize(10)
+        metrics = QFontMetricsF(font)
+        entries = []
+        x, y = 34, 0
+        for mode, label in [
+            ("ultrafast", tr("Ultra Fast")),
+            ("fast", tr("Fast")),
+            ("standard", tr("普通")),
+            ("other", tr("其他 / 未记录")),
+        ]:
+            width = math.ceil(metrics.horizontalAdvance(label)) + 15
+            if x > 34 and x + width > self.width() - 8:
+                x, y = 34, y + 18
+            entries.append((QRectF(x, y, width, 18), mode, label))
+            x += width + 14
+        return entries
 
     def point_position(self, index: int) -> QPointF:
         if self._positions is None:
@@ -271,7 +314,7 @@ class TimelineChart(QWidget):
         at = self.card_time(sample)
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignLeft, at)
         mode = mode_info(sample)[0]
-        color = c[{"fast": "accent", "standard": "chart_standard", "other": "muted"}[mode]]
+        color = c[MODE_COLORS[mode]]
         painter.setPen(QColor(color))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignRight, mode_caption(sample))
         unit_width = QFontMetricsF(font).horizontalAdvance("tokens/s") + 6
@@ -308,7 +351,17 @@ class TimelineChart(QWidget):
         painter.setPen(QPen(color, 1.2))
         painter.setBrush(color if mode != "other" else Qt.BrushStyle.NoBrush)
         x, y = position.x(), position.y()
-        if mode == "fast":
+        if mode == "ultrafast":
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        QPointF(x, y - radius),
+                        QPointF(x + radius, y + radius),
+                        QPointF(x - radius, y + radius),
+                    ]
+                )
+            )
+        elif mode == "fast":
             painter.drawPolygon(
                 QPolygonF(
                     [
@@ -333,16 +386,12 @@ class TimelineChart(QWidget):
         font = painter.font()
         font.setPixelSize(10)
         painter.setFont(font)
-        palette = {"fast": c["accent"], "standard": c["chart_standard"], "other": c["muted"]}
-        for x, mode, label in [
-            (34, "fast", "Fast"),
-            (110, "standard", tr("普通")),
-            (181, "other", tr("其他 / 未记录")),
-        ]:
-            legend_top = plot.bottom() + 48
-            self.marker(painter, QPointF(x + 3, legend_top + 9), mode, 3, QColor(palette[mode]))
+        palette = {mode: c[key] for mode, key in MODE_COLORS.items()}
+        for rect, mode, label in self.legend_layout():
+            rect = rect.translated(0, plot.bottom() + 48)
+            self.marker(painter, rect.topLeft() + QPointF(3, 9), mode, 3, QColor(palette[mode]))
             painter.setPen(QColor(c["muted"]))
-            painter.drawText(QRectF(x + 13, legend_top, 105, 18), Qt.AlignmentFlag.AlignLeft, label)
+            painter.drawText(rect.adjusted(13, 0, 0, 0), Qt.AlignmentFlag.AlignLeft, label)
         for rate in (0, self.maximum / 2, self.maximum):
             y = plot.bottom() - rate / self.maximum * plot.height()
             painter.setPen(QPen(QColor(c["line"]), 0.7))

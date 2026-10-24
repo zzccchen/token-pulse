@@ -47,12 +47,15 @@ Windows are rolling 30-minute, 1-day, and 7-day ranges filtered by completion ti
 | --- | --- |
 | Configuration | Observed global setting; not necessarily a task or historical request setting |
 | Submitted setting | A value or instruction associated with a specific task and turn |
+| Turn configuration tag | A sampling step's scoped client setting; not proof of submission, outbound request, or execution |
 | Request value | A value explicitly observed in outbound-request evidence |
 | Actual tier | Explicit server confirmation; not extracted by the current adapter |
 
-Channel/provider and authentication mode are independent of tier. Fast markers prefer explicit request values, then submitted settings. Submitted `priority`/`fast` maps to Fast; explicit `default` or clearing an override maps to Standard. Missing, unspecified, or conflicting evidence does not default to Standard. Display classification does not establish execution tier.
+Channel/provider and authentication mode are independent of tier. Mode markers prefer explicit request values, then submitted settings. Explicit `ultrafast` maps to Ultra Fast, while `priority` and `fast` map to Fast; explicit `default` or clearing an override maps to Standard. Ultra Fast uses an orange triangle, Fast a teal diamond, Standard a blue circle, and other/unrecorded modes a cross. All modes still contribute to the same model's window statistics. Raw tier values remain unchanged in record details, history, and CSV. Missing, unspecified, or conflicting evidence does not default to Standard. Display classification does not establish execution tier.
 
 Submission parsing reads bounded outer fields and skips user content. `Some(None)` (clear), `None` (unspecified), and explicit values remain distinct. Contradictory evidence remains a conflict rather than being resolved by arrival order. An unsupported second override position is not assigned a guessed precedence.
+
+Scoped diagnostic feedback tags are stored independently as `config_tag_tier` and `config_tag_state` when every observed task and turn scope agrees. With no explicit request or decisive submission evidence, they provide a labeled fallback such as **Fast (configuration tag)**. They never populate submitted, requested, or actual tiers. A conflicting submission blocks the fallback; an unspecified submission permits it. `unset`, missing/null tags, or conflicting configuration tags do not imply Standard. Unscoped settings snapshots cannot fill a historical turn. History places the mode and evidence beside model and TPS, with each raw evidence category in its own column and in CSV.
 
 ## Identity and recovery
 

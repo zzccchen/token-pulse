@@ -49,6 +49,20 @@ def test_request_without_tier_does_not_invent_default_or_priority():
     assert logs.starts["task", "a"].requested_tier is None
 
 
+def test_sampling_tag_does_not_hide_explicit_request_in_same_record():
+    from test_submissions import feedback_body
+
+    logs = LogEvidence()
+    message = feedback_body("default", turn="turn-a").replace(
+        ': model="model-a"', ':stream_request{service_tier=priority}: model="model-a"'
+    )
+    logs.accept("task", 9, "feedback_tags", message)
+    logs.accept("task", 10, "codex_core::stream_events_utils", body())
+    assert logs.config_tags["task", "turn-a"].tier == "default"
+    assert logs.starts["task", "a"].requested_tier == "priority"
+    assert not logs.submissions
+
+
 def test_memory_is_bounded_and_tasks_do_not_collide():
     logs = LogEvidence(capacity=2)
     for task in ["one", "two", "three"]:
@@ -185,3 +199,35 @@ def test_start_replay_enriches_metadata_but_never_uses_future_request():
     assert not logs.starts["task", "a"].ambiguous
     logs.accept("task", 15, target, body("before-request"))
     assert logs.starts["task", "before-request"].requested_tier is None
+
+
+def test_scoped_feedback_is_recovered_and_replayed_without_inventing_requests(tmp_path):
+    from test_submissions import feedback_body
+
+    path = tmp_path / "logs.sqlite"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "CREATE TABLE logs(id INTEGER PRIMARY KEY,ts,ts_nanos,"
+            "thread_id,target,feedback_log_body)"
+        )
+        connection.executemany(
+            "INSERT INTO logs VALUES(?,?,?,?,?,?)",
+            [
+                (1, 9, 0, "task", "feedback_tags", feedback_body(turn="turn-a")),
+                (2, 10, 0, "task", "codex_core::stream_events_utils", body()),
+                (100000, 20, 0, "task", "unrelated", "unrelated event"),
+            ],
+        )
+    evidence = LogEvidence()
+    reader = SqliteLogs(path, evidence, backfill=10)
+    assert reader.poll() is None
+    assert evidence.config_tags["task", "turn-a"].tier == "ultrafast"
+    assert not evidence.submissions
+    assert evidence.starts["task", "a"].requested_tier is None
+    assert reader.poll() is None
+    assert len(evidence.config_tags) == 1
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM logs WHERE id>1")
+    assert reader.poll() is None  # A truncated database resets and replays its retained evidence.
+    assert len(evidence.config_tags) == 1
+    assert not evidence.starts

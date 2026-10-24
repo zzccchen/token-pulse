@@ -23,7 +23,8 @@ from token_pulse.history import export_csv
 from token_pulse.i18n import tr
 from token_pulse.stats import grouped
 from token_pulse.ui.glass import Backdrop, GlassBar, MaterialComboBox
-from token_pulse.ui.panel import ISSUES, submission_label, text_label
+from token_pulse.ui.panel import ISSUES, configuration_tag_label, submission_label, text_label
+from token_pulse.ui.timeline_chart import mode_info
 
 
 class HistoryWindow(QMainWindow):
@@ -68,7 +69,7 @@ class HistoryWindow(QMainWindow):
         self.summary = text_label(tr("还没有历史样本"), "muted")
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
-        self.table = QTableWidget(0, 13)
+        self.table = QTableWidget(0, 15)
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -95,19 +96,23 @@ class HistoryWindow(QMainWindow):
                 tr("时间"),
                 tr("任务"),
                 tr("模型"),
+                tr("模式 / 依据"),
+                "TPS",
+                tr("输出 tokens"),
+                tr("流秒数"),
                 tr("强度"),
                 tr("渠道"),
                 tr("提交设置"),
+                tr("配置标签"),
                 tr("请求层级"),
                 tr("实际层级"),
-                tr("输出 tokens"),
-                tr("流秒数"),
-                "TPS",
                 tr("口径"),
                 tr("说明"),
             ]
         )
-        for column, width in enumerate([115, 75, 100, 50, 130, 110, 75, 75, 90, 65, 60, 65, 130]):
+        for column, width in enumerate(
+            [115, 75, 100, 200, 60, 90, 65, 50, 130, 110, 110, 75, 75, 65, 130]
+        ):
             header = self.table.horizontalHeaderItem(column)
             header.setToolTip(header.text())
             text_width = (
@@ -230,14 +235,16 @@ class HistoryWindow(QMainWindow):
                 datetime.fromtimestamp(sample.ended_at).strftime("%m-%d %H:%M:%S"),
                 sample.task_id[:8],
                 ctx.model or tr("未知"),
+                mode_info(sample)[1],
+                round(sample.tps, 1) if sample.tps is not None else None,
+                sample.output_tokens,
+                round(sample.seconds, 3) if sample.seconds else None,
                 ctx.effort or tr("未知"),
                 channel,
                 submission_label(ctx),
+                configuration_tag_label(ctx),
                 ctx.requested_tier or tr("未知"),
                 ctx.actual_tier or tr("未确认"),
-                sample.output_tokens,
-                round(sample.seconds, 3) if sample.seconds else None,
-                round(sample.tps, 1) if sample.tps is not None else None,
                 tr("总输出") if sample.token_scope == "total_output" else sample.token_scope,
                 tr(ISSUES.get(sample.exclusion, "数据不足"))
                 if sample.exclusion
@@ -249,7 +256,7 @@ class HistoryWindow(QMainWindow):
                     item.setData(Qt.ItemDataRole.UserRole, sample.key)
                 item.setData(Qt.ItemDataRole.DisplayRole, "—" if value is None else value)
                 item.setToolTip("—" if value is None else str(value))
-                if column == 12 and sample.timing_source:
+                if column == 14 and sample.timing_source:
                     boundary = {
                         "stream-log": tr("诊断日志起点"),
                         "item-event": tr("输出事件起点"),
@@ -266,7 +273,7 @@ class HistoryWindow(QMainWindow):
                             parser_revision=sample.parser_revision,
                         )
                     )
-                if 8 <= column <= 10:
+                if 4 <= column <= 6:
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
                     )

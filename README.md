@@ -1,8 +1,8 @@
 # TokenPulse · 词脉
 
-**See how fast your local Codex sessions are producing output.**
+**A local output-speed monitor for Codex, built with Codex.**
 
-A local, read-only tray monitor for Windows and Linux. Pick a model, inspect completed output speeds across conversations, and keep your observations on your own machine.
+TokenPulse is a read-only tray app for Windows and Linux. Pick a model and a time window to see output speeds across conversations. It reads local Codex logs and keeps your history on your computer.
 
 [![Checks](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/zzccchen/token-pulse/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -21,7 +21,7 @@ English · [简体中文](README.zh-CN.md)
 
 - **One view per model.** Combine conversations over 30 minutes, 1 day, or 7 days; inspect the weighted average, median, range, and sample count.
 - **Every measured output.** Explore a scatter plot, hover for timing and tokens, and open the anonymous record. Keyboard navigation reaches overlapping points.
-- **Evidence behind the labels.** Inspect configuration, submitted settings, request values, and server-confirmed values separately. Unknown stays unknown.
+- **Evidence behind the labels.** Inspect global configuration, turn configuration tags, submitted settings, request values, and server-confirmed values separately. Unknown stays unknown.
 - **A quiet tray companion.** Show an optional speed number or use a normal window when a tray is unavailable.
 - **Local history.** Filter observations and export CSV. Light/dark themes, reduced effects, English, and Simplified Chinese are included.
 
@@ -29,7 +29,9 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
-You need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
+**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.5), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
+
+**From source (Windows or Linux):** you need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```sh
 git clone https://github.com/zzccchen/token-pulse.git
@@ -63,11 +65,11 @@ Model average = sum(valid output tokens) / sum(matching stream seconds)
 
 These are **completed-output estimates from client logs**, not a live token counter or a controlled benchmark. Total output tokens can include reasoning and generated tool calls. Initial waiting and tool execution do not count as generation time.
 
-When tokens and timing cannot be matched reliably, the record remains available but has no TPS. Fast markers describe request or submitted-setting evidence; they do not prove server-side priority. [Measurement rules →](docs/measurement.md)
+When tokens and timing cannot be matched reliably, the record remains available but has no TPS. Ultra Fast and Fast have separate markers. Labels prefer request or submitted-setting evidence; a scoped configuration fallback is explicitly labeled **configuration tag**. None of these labels proves server-side priority. [Measurement rules →](docs/measurement.md)
 
 ## Status and limits
 
-TokenPulse is an early **0.1.0** project. The adapter targets observed **Codex 0.153.4-series local log formats**; these internal formats can change.
+TokenPulse is an early **0.1.5** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
 
 | Environment | Validation scope |
 | --- | --- |
@@ -77,7 +79,7 @@ TokenPulse is an early **0.1.0** project. The adapter targets observed **Codex 0
 
 Missing or rotated logs can leave gaps. Final server-confirmed service tiers are not currently extracted. Remote hosts, other clients, cost tracking, and changing Codex settings are outside the current scope.
 
-Install from source today. Python packages and a Windows EXE can be built locally; there is no PyPI release or supported downloadable EXE yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
+Windows portable builds include dependency notices, corresponding Qt/PySide sources, and SHA-256 checksums. Clean-machine Windows testing remains pending. There is no PyPI release or Linux binary yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
 
 ## Contribute
 
@@ -88,7 +90,7 @@ Useful first contributions include Linux desktop validation, synthetic format re
 - [Contribution guide](CONTRIBUTING.md) · [Development](docs/development.md) · [Architecture](docs/architecture.md)
 - [Roadmap](ROADMAP.md) · [Security reporting](SECURITY.md)
 
-English and Chinese reports are welcome. If TokenPulse is useful to you, a star helps other people find it.
+Found a problem? [Open an issue](https://github.com/zzccchen/token-pulse/issues). English and Chinese are both welcome.
 
 ## License
 

@@ -9,7 +9,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from token_pulse.submissions import SubmittedTier, submitted_tier
+from token_pulse.submissions import ConfigurationTag, SubmittedTier, feedback_tier, submitted_tier
 
 _START = re.compile(
     r'^Output item item_type="(reasoning|message|function_call|custom_tool_call)" '
@@ -46,29 +46,33 @@ class LogEvidence:
         self.requests: dict[tuple[str, str], tuple[float, str | None, str | None]] = {}
         self.notices: OrderedDict[str, tuple[float, str]] = OrderedDict()
         self.submissions: OrderedDict[tuple[str, str], SubmittedTier] = OrderedDict()
+        self.config_tags: OrderedDict[tuple[str, str], ConfigurationTag] = OrderedDict()
         self.capacity = capacity
 
     def accept(self, task: str, at: float, target: str, body: str) -> None:
         if not task or not body:
             return
-        if target == "codex_core::session::handlers":
-            result = submitted_tier(task, at, body)
+        if target in {"codex_core::session::handlers", "feedback_tags"}:
+            parse_tier = submitted_tier if target.endswith("::handlers") else feedback_tier
+            settings = self.submissions if target.endswith("::handlers") else self.config_tags
+            result = parse_tier(task, at, body)
             if result is not None:
                 turn_id, observation = result
                 key = task, turn_id
-                previous = self.submissions.get(key)
+                previous = settings.get(key)
                 if previous is not None:
                     if (previous.tier, previous.state) != (observation.tier, observation.state):
-                        observation = SubmittedTier(min(previous.at, at), None, "ambiguous")
+                        observation = type(observation)(min(previous.at, at), None, "ambiguous")
                     else:
-                        observation = SubmittedTier(
+                        observation = type(observation)(
                             min(previous.at, at), previous.tier, previous.state
                         )
-                self.submissions[key] = observation
-                self.submissions.move_to_end(key)
-                while len(self.submissions) > self.capacity:
-                    self.submissions.popitem(last=False)
-                return
+                settings[key] = observation
+                settings.move_to_end(key)
+                while len(settings) > self.capacity:
+                    settings.popitem(last=False)
+                if target == "codex_core::session::handlers":
+                    return
         if "ToolCall:" in body:
             return
         # Limit pattern work; never inspect arbitrary tool bodies for markers.
@@ -150,6 +154,7 @@ class SqliteLogs:
                     self.evidence.starts.clear()
                     self.evidence.requests.clear()
                     self.evidence.submissions.clear()
+                    self.evidence.config_tags.clear()
                     # Submission rows are sparse. The normal ID window can miss
                     # them even while they remain in the database. Backfill this
                     # one target separately, once per database reset, with a cap.
