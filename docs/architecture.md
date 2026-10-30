@@ -1,6 +1,6 @@
 # Architecture
 
-TokenPulse uses Python 3.11+, PySide6 Essentials (Qt Widgets), and SQLite. The parser, statistics, and persistence layers use the Python standard library. Qt provides native desktop entry points without an embedded browser.
+TokenPulse uses Python 3.11+, PySide6 Essentials (Qt Widgets), and SQLite. Measurement and persistence use the Python standard library; pyzstd supplies bounded streaming decompression of archived sessions. Qt provides native desktop entry points without an embedded browser.
 
 ```mermaid
 flowchart LR
@@ -20,9 +20,10 @@ All paths below are relative to `src/token_pulse/`.
 | Module | Responsibility |
 | --- | --- |
 | `domain.py` | Samples, context, exclusions, evidence reconciliation, task freshness |
-| `tailer.py` | Bounded incremental JSONL reads, partial lines, truncation and rotation |
+| `tailer.py` | Bounded plain/compressed JSONL reads, partial lines, frame validation, truncation and rotation |
 | `collector.py` | Source discovery, path containment, live polling and task state |
 | `logs.py`, `submissions.py` | Read-only diagnostics and bounded outer submission parsing |
+| `transport.py`, `transport_logs.py` | Responses sequence validation, bounded SQLite transport recovery and safe cursors |
 | `rollout.py` | Event normalization, usage/timing association, fork and replay detection |
 | `backfill.py` | Budgeted seven-day historical recovery independent of the live task limit |
 | `history.py` | Local HMAC identities, SQLite persistence, revisions, recovery records, CSV |
@@ -37,7 +38,11 @@ The UI consumes snapshots and never parses raw logs or reads source databases. A
 
 Source adapters interpret version-dependent internal formats. The normalized model retains unknown evidence rather than guessing it. Exact statistics and exclusion rules are defined in [measurement](measurement.md); source relationships and regression rationale are in [source evidence](source-audit.md).
 
+Discovery inspects required SQLite tables/columns in the source root and its historical `sqlite/` layout. It selects one compatible index and general diagnostic database. The transport reader separately checks up to eight compatible diagnostic stores; overlapping outputs merge by exact response identities or complete item aliases. Each source validates its own stream without splicing events across stores. Indexed `.jsonl` paths can resolve to compressed siblings; both spellings share a logical recovery key, while changed container metadata invalidates reuse. Decoding is sequential and in memory. Compressed byte positions are never used as decoded JSONL offsets, and thread-history offsets are not currently consumed.
+
 Live tracking is bounded to 32 recent unarchived tasks. Separate historical recovery covers indexed sessions, including archived ones, in bounded chunks. Completed-file records are saved only after sample persistence; changed files, evidence, or recovery rules trigger re-evaluation. Pending writes are bounded and retried. See [compatibility](compatibility.md) for limits.
+
+Transport parsing retains identities, lifecycle metadata and ephemeral HMAC event digests rather than response content. Persistence stores pseudonymized aliases and quiescent cursors after sample writes succeed; an interrupted response replays from a prior safe boundary. Rotation/replacement, schema changes and unsupported events degrade to excluded records. A valid transport interval replaces weaker timing as a unit, while source provenance remains available. The UI and weighted aggregation consume the same normalized `Sample` objects as session recovery.
 
 Keep platform differences in path discovery, tray/window behavior, and system integration. Statistical tests must run without live Codex accounts or network calls. Do not add a plugin framework for hypothetical future clients.
 

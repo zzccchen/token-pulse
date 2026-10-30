@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.6 — Validated transport measurements and historical recovery
+
+- Exclude whole responses with unknown output-item scopes or unvalidated legacy usage counters. Preserve explicit usage records without output timing instead of dropping them.
+- Replace adjacent, exactly scoped legacy/explicit usage without duplicate history. Let later matched diagnostic starts extend saved lifecycle intervals within the same parser revision; keep valid measurements when logs disappear.
+- Recover indexed `.jsonl.zst` archives with bounded streaming decompression, complete-frame validation, restart-safe checkpoints, and plain/compressed identity deduplication.
+- Discover compatible SQLite schemas in current and historical layouts, parse bounded older Debug item starts, and respect explicit subagent history ordinal boundaries. Selection depends on available evidence rather than Codex version labels.
+- Integrate validated SSE/WebSocket Responses sequences from compatible diagnostic databases into normal statistics. Require exact routing, contiguous event sequences, matching item/content lifecycles and completed-response usage; preserve excluded records and explicit server-returned tiers.
+- Deduplicate transport and session evidence by scoped response IDs or complete ordered item identities, including across restarts. Prefer the complete validated transport interval; conflicting usage or ambiguous identities cannot produce TPS.
+- Recover transport logs incrementally with bounded reads, rotation detection and HMAC-only checkpoints committed after samples. Interrupted streams replay from the last quiescent checkpoint without persisting their content.
+- Exclude intervals spanning explicit, exactly scoped sampling retries; retain their tokens without estimating or subtracting retry time. Correct saved measurements outside the live response cache and prevent missing logs from restoring invalid timing. A complete exact transport sequence can independently validate an interval.
+- Preserve unsupported server-tool exclusion reasons instead of masking them with subsequent item-index conflicts. No speed or duration thresholds are introduced.
+- Bump measurement parser revision to 7 and recovery revision to 10. Add synthetic regressions and pyzstd dependency/packaging notices. Thread-history projections remain outside production sample feeds.
+
 ## 0.1.5 — Sampling tags with unquoted working directories
 
 - Recognize scoped configuration tags when a sampling span ends with an unquoted absolute working directory containing spaces. Ignore the directory value; keep exact task/turn matching and reject ambiguous field-like path content.

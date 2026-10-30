@@ -11,7 +11,10 @@ from datetime import datetime
 from token_pulse.domain import Context, Sample, Task
 from token_pulse.logs import LogEvidence, label
 
-REJECTIONS = {"inherited_history", "stale_usage_snapshot"}
+REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
+PARSER_REVISION = 7
+GENERATED = {"reasoning", "function_call", "custom_tool_call"}
+TOOL_RESULTS = {"function_call_output", "custom_tool_call_output", "tool_search_output"}
 
 
 def timestamp(value: object) -> float | None:
@@ -50,6 +53,7 @@ class Response:
     issue: str | None
     timings: tuple[ItemTiming | None, ...] = ()
     first_kind: str | None = None
+    usage_issue: str | None = None
 
 
 class Rollout:
@@ -89,6 +93,11 @@ class Rollout:
         self.legacy_items: dict[str, float] = {}
         self.legacy_turn = ""
         self.legacy_seen: deque[str] = deque(maxlen=300)
+        self.legacy_candidate: Response | None = None
+        self.has_output = False
+        self.history_start: int | None = None
+        self.ordinal_inherited = False
+        self.history_ordinal_missing = False
 
     def damage(self, reason: str) -> None:
         if not self.damaged:
@@ -97,6 +106,9 @@ class Rollout:
 
     def reset(self, *, legacy: bool = True) -> None:
         self.items.clear()
+        self.has_output = False
+        self.first_output_kind = None
+        self.legacy_candidate = None
         self.item_timings.clear()
         self.boundary = False
         self.damaged = True
@@ -113,11 +125,34 @@ class Rollout:
         if legacy:
             self.legacy_items.clear()
             self.legacy_turn = ""
+            self.history_start = None
+            self.ordinal_inherited = False
+            self.history_ordinal_missing = False
 
     def feed(self, record: dict) -> None:
+        if record.get("type") != "token_usage_record":
+            self.legacy_candidate = None
+        payload = record.get("payload")
+        if record.get("type") == "session_meta" and isinstance(payload, dict):
+            boundary = payload.get("subagent_history_start_ordinal")
+            if payload.get("id") == self.task_id and type(boundary) is int and boundary >= 0:
+                self.history_start = boundary
+        ordinal = record.get("ordinal")
+        if self.history_start is not None and record.get("type") != "session_meta":
+            if type(ordinal) is not int:
+                self.history_ordinal_missing = True
+            else:
+                inherited = ordinal < self.history_start
+                if self.ordinal_inherited and not inherited:
+                    self.reset(legacy=False)
+                    self.inherited = False
+                    self.context = self.own_context
+                self.ordinal_inherited = inherited
         previous_boundary = self._legacy_boundary(record)
         before = self.responses[-1] if self.responses else None
         self._feed(record)
+        if record.get("type") == "token_usage_record":
+            self.legacy_candidate = None
         if previous_boundary is not None:
             after = self.responses[-1] if self.responses else None
             if after is before or (
@@ -176,7 +211,7 @@ class Rollout:
             items,
             self.context,
             "inherited_history"
-            if self.inherited or self.inherited_items
+            if self.inherited or self.inherited_items or self.ordinal_inherited
             else "stale_usage_snapshot",
         )
 
@@ -211,7 +246,7 @@ class Rollout:
             self.context = replace(
                 self.context, model=label(value.get("model")), effort=label(value.get("effort"))
             )
-            if not self.inherited:
+            if not self.inherited and not self.ordinal_inherited:
                 self.own_context = self.context
         elif kind == "event_msg":
             if event == "item_completed":
@@ -244,31 +279,47 @@ class Rollout:
                 total = info.get("total_token_usage")
                 total = total.get("output_tokens") if isinstance(total, dict) else None
                 previous = self.last_output_total
-                if type(total) is int and total >= 0:
+                usage_issue = None
+                if type(total) is int and 0 <= total <= 2**63 - 1:
                     self.last_output_total = total
                     if previous is not None and total == previous:
                         return  # Rate-limit/resume notifications can repeat old usage.
-                    if previous is not None and self.items:
+                    if previous is not None and self.has_output:
                         if total < previous:
-                            self.damage("usage_counter_reset")
+                            usage_issue = "usage_counter_reset"
                         elif isinstance(usage, dict) and total - previous != usage.get(
                             "output_tokens"
                         ):
-                            self.damage("usage_scope_mismatch")
+                            usage_issue = "usage_scope_mismatch"
                     elif (
-                        self.items
+                        self.has_output
                         and isinstance(usage, dict)
                         and total != usage.get("output_tokens")
                     ):
-                        self.damage("missing_usage_baseline")
-                if self.items:
-                    self._usage(usage, at, None)
+                        usage_issue = "missing_usage_baseline"
+                else:
+                    usage_issue = "missing_usage_baseline"
+                    self.last_output_total = None
+                if self.has_output:
+                    self._usage(usage, at, None, legacy=True, usage_issue=usage_issue)
         elif kind == "response_item":
-            output = event in {"reasoning", "function_call", "custom_tool_call"}
+            output = event in GENERATED
             output |= event == "message" and value.get("role") == "assistant"
+            known_input = event == "message" and value.get("role") in {
+                "user",
+                "system",
+                "developer",
+            }
+            if not output and not known_input and event not in TOOL_RESULTS:
+                # Unknown generated items may include tool execution or otherwise
+                # unobserved output. Never measure only the recognized suffix.
+                self.damage("unsupported_output_item")
+                output = True
             if output:
-                if not self.items:
+                self.legacy_candidate = None
+                if not self.has_output:
                     self.first_output_kind = event
+                self.has_output = True
                 item_id = value.get("id")
                 if not isinstance(item_id, str) or not item_id:
                     self.damage("missing_item_id")
@@ -282,7 +333,7 @@ class Rollout:
                     self.calls.add(str(value.get("call_id", item_id)))
                     self.state = "tool"
                 self.updated_at = at
-            elif event in {"function_call_output", "custom_tool_call_output"}:
+            elif event in TOOL_RESULTS:
                 self.calls.discard(str(value.get("call_id", "")))
                 self.state = "tool" if self.calls else "waiting"
                 # Codex emits legacy token_count only after pending tools resolve.
@@ -291,11 +342,18 @@ class Rollout:
                 self.updated_at = at
         elif kind == "token_usage_record":
             if value.get("thread_id", self.task_id) != self.task_id:
+                self.legacy_candidate = None
                 self.inherited_items = bool(self.items)
                 return
-            if value.get("turn_id", self.turn_id) != self.turn_id:
+            explicit_turn = value.get("turn_id")
+            if not isinstance(explicit_turn, str):
+                explicit_turn = self.turn_id
+            if explicit_turn != self.turn_id:
+                self.legacy_candidate = None
                 self.damage("turn_mismatch")
-            self._usage(value.get("usage"), at, value.get("response_id"))
+            if value.get("thread_id") != self.task_id or value.get("turn_id") != self.turn_id:
+                self.legacy_candidate = None
+            self._usage(value.get("usage"), at, value.get("response_id"), turn_id=explicit_turn)
         if len(self.items) > 1000:
             self.items.clear()
             self.item_timings.clear()
@@ -304,6 +362,9 @@ class Rollout:
     def _turn(self, turn_id: str, at: float) -> None:
         if turn_id != self.turn_id:
             self.items.clear()
+            self.has_output = False
+            self.first_output_kind = None
+            self.legacy_candidate = None
             self.item_timings.clear()
             self.calls.clear()
             self.turn_id = turn_id
@@ -317,23 +378,59 @@ class Rollout:
         self.state = "waiting"
         self.updated_at = at
 
-    def _usage(self, usage: object, at: float, response_id: object) -> None:
-        if not self.items:
-            return  # Replayed token_count / usage notification, not another response.
+    def _usage(
+        self,
+        usage: object,
+        at: float,
+        response_id: object,
+        *,
+        legacy: bool = False,
+        usage_issue: str | None = None,
+        turn_id: str | None = None,
+    ) -> None:
+        tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+        explicit_id = isinstance(response_id, str) and bool(response_id)
+        if explicit_id and response_id in self.seen:
+            return  # A replay must not consume the next response's pending items.
+        candidate = self.legacy_candidate
+        if (
+            not legacy
+            and explicit_id
+            and not self.has_output
+            and candidate is not None
+            and candidate.turn_id == self.turn_id
+            and candidate.tokens == tokens
+            and at >= candidate.at
+            and type(tokens) is int
+            and tokens >= 0
+        ):
+            # A scoped explicit usage following the legacy usage closes the same
+            # pending output. Replace its provisional identity, including on disk.
+            self.responses = deque((r for r in self.responses if r is not candidate), maxlen=300)
+            self.corrections.append(replace(candidate, issue="superseded_usage"))
+            response = replace(candidate, id=response_id, usage_issue=None)
+            self.responses.append(response)
+            self.seen.add(response_id)
+            self.legacy_candidate = None
+            return
+        if not self.has_output and not explicit_id:
+            return
         if not isinstance(response_id, str) or not response_id:
-            response_id = hashlib.sha256("|".join(self.items).encode()).hexdigest()
+            identity = "|".join(self.items) or f"{self.turn_id}:{at}:unidentified-output"
+            response_id = hashlib.sha256(identity.encode()).hexdigest()
         if response_id in self.seen:
             self.items.clear()
             return
-        tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
         issue = "incomplete_boundary" if not self.boundary else None
         if self.damaged:
             issue = self.damage_reason or "record_gap"
-        if self.inherited or self.inherited_items:
+        if self.history_ordinal_missing:
+            issue = "missing_history_ordinal"
+        if self.inherited or self.inherited_items or self.ordinal_inherited:
             issue = "inherited_history"
         self.responses.append(
             Response(
-                self.turn_id,
+                self.turn_id if turn_id is None else turn_id,
                 response_id,
                 at,
                 tokens,
@@ -342,12 +439,16 @@ class Rollout:
                 issue,
                 tuple(self.item_timings.get(item) for item in self.items),
                 self.first_output_kind,
+                usage_issue,
             )
         )
+        self.legacy_candidate = self.responses[-1] if legacy else None
         self.seen = {r.id for r in self.responses}
         for item in self.items:
             self.item_timings.pop(item, None)
         self.items.clear()
+        self.has_output = False
+        self.first_output_kind = None
         self.boundary = True
         self.damaged = False
         self.damage_reason = None
@@ -385,7 +486,7 @@ class Rollout:
         samples = []
         for response in (*self.responses, *self.corrections):
             starts = [evidence.starts.get((self.task_id, item)) for item, _ in response.items]
-            issue = response.issue
+            issue = response.issue or response.usage_issue
             tool_first = response.first_kind in {"function_call", "custom_tool_call"}
             if tool_first:
                 # The added event already identifies the selected tool. Its timestamp
@@ -396,6 +497,20 @@ class Rollout:
             start_at = None
             timing_source = None
             timings = response.timings or (None,) * len(response.items)
+            if not response.items:
+                samples.append(
+                    Sample(
+                        self.task_id,
+                        response.turn_id,
+                        response.id,
+                        response.at,
+                        response.tokens,
+                        context=self._submitted(context, response.turn_id, response.at, evidence),
+                        issue=issue or "missing_output_items",
+                        parser_revision=PARSER_REVISION,
+                    )
+                )
+                continue
             first_timing = timings[0]
             first_start = starts[0]
             coincident_start = (
@@ -450,6 +565,13 @@ class Rollout:
                 timing.end if timing is not None and not timing.ambiguous else end
                 for timing, (_, end) in zip(timings, response.items, strict=True)
             )
+            if evidence.interrupted(
+                self.task_id,
+                response.turn_id,
+                start_at if start_at is not None else response.items[0][1],
+                end,
+            ):
+                issue = issue or "interrupted_response"
             context = self._submitted(context, response.turn_id, end, evidence)
             if tool_first:
                 start_at = None
@@ -467,8 +589,17 @@ class Rollout:
                     start_at,
                     context,
                     issue=issue,
-                    parser_revision=4,
+                    parser_revision=PARSER_REVISION,
                     timing_source=timing_source,
+                    response_aliases=(
+                        hashlib.sha256(
+                            "|".join(item for item, _ in response.items).encode()
+                        ).hexdigest(),
+                    )
+                    if response.issue is None
+                    and response.usage_issue is None
+                    and issue != "interrupted_response"
+                    else (),
                 )
             )
         return samples
@@ -489,24 +620,25 @@ class Rollout:
     def task(self, evidence: LogEvidence) -> Task:
         samples = [sample for sample in self.samples(evidence) if sample.issue not in REJECTIONS]
         latest = samples[-1] if samples else None
+        inherited = self.inherited or self.ordinal_inherited
         context = self._submitted(
-            self.own_context if self.inherited else self.context,
+            self.own_context if inherited else self.context,
             self.turn_id,
             self.updated_at,
             evidence,
         )
-        state, updated = ("unknown", 0.0) if self.inherited else (self.state, self.updated_at)
+        state, updated = ("unknown", 0.0) if inherited else (self.state, self.updated_at)
         for (task_id, _), start in reversed(evidence.starts.items()):
-            if not self.inherited and task_id == self.task_id and start.turn_id == self.turn_id:
+            if not inherited and task_id == self.task_id and start.turn_id == self.turn_id:
                 context = replace(
                     context, auth_mode=start.auth_mode, requested_tier=start.requested_tier
                 )
                 if start.at > updated:
                     state, updated = "generating", start.at
                 break
-        notice = None if self.inherited else self.notice
+        notice = None if inherited else self.notice
         if (
-            not self.inherited
+            not inherited
             and self.task_id in evidence.notices
             and evidence.notices[self.task_id][0] >= self.turn_started_at
         ):
@@ -518,7 +650,7 @@ class Rollout:
             updated,
             context,
             latest,
-            None if self.inherited else self.turn_seconds,
-            None if self.inherited else self.wait_seconds,
+            None if inherited else self.turn_seconds,
+            None if inherited else self.wait_seconds,
             notice,
         )

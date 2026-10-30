@@ -258,6 +258,7 @@ class HistoryWindow(QMainWindow):
                 item.setToolTip("—" if value is None else str(value))
                 if column == 14 and sample.timing_source:
                     boundary = {
+                        "transport-log": tr("传输日志边界"),
                         "stream-log": tr("诊断日志起点"),
                         "item-event": tr("输出事件起点"),
                         "tool-item-notification": tr("仅有工具调用项通知，不是完整生成计时"),

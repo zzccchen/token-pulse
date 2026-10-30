@@ -111,16 +111,20 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
             self.evidence = LogEvidence()
             self.backfill = Backfill()
             self.polls = 0
+            self.transport_completed = {}
 
         def poll(self):
             self.polls += 1
             if self.polls == 1:
                 self.backfill.completed["anonymous-source"] = ("fingerprint", now)
+                self.transport_completed["anonymous-transport"] = (12, "anchor", "identity", 6, now)
                 return Snapshot(samples=(one,), at=now)
             return Snapshot(samples=(two,), at=now)
 
     original_append = History.append
     original_save = History.save_checkpoints
+    original_transport_save = History.save_transport_checkpoints
+    transport_checks = []
     attempts = 0
 
     def append(self, samples, **kwargs):
@@ -136,19 +140,27 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
         checks.append(True)
         return original_save(self, values, **kwargs)
 
+    def save_transport(self, values, **kwargs):
+        assert attempts >= 2
+        assert len(self.read()) == 2
+        transport_checks.append(True)
+        return original_transport_save(self, values, **kwargs)
+
     monkeypatch.setattr("token_pulse.service.Collector", SyntheticCollector)
     monkeypatch.setattr(History, "append", append)
     monkeypatch.setattr(History, "save_checkpoints", save)
+    monkeypatch.setattr(History, "save_transport_checkpoints", save_transport)
     monitor = Monitor(tmp_path, tmp_path / "data", interval=0.1)
     monitor.start()
     try:
         deadline = time.monotonic() + 5
-        while not checks and time.monotonic() < deadline:
+        while not transport_checks and time.monotonic() < deadline:
             time.sleep(0.01)
-        assert checks
+        assert checks and transport_checks
     finally:
         monitor.stop()
     history = History(tmp_path / "data/history.sqlite")
     assert len(history.read()) == 2
     assert history.source_checkpoints() == {"anonymous-source": "fingerprint"}
+    assert history.transport_checkpoints() == {"anonymous-transport": (12, "anchor", "identity", 6)}
     history.close()

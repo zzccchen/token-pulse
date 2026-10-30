@@ -29,7 +29,7 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
-**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.5), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
+**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.6), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
 
 **From source (Windows or Linux):** you need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
@@ -69,7 +69,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.5** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
+TokenPulse is an early **0.1.6** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
 
 | Environment | Validation scope |
 | --- | --- |
@@ -77,7 +77,11 @@ TokenPulse is an early **0.1.5** project. The original supported range is **Code
 | Ubuntu 24.04 under WSL2 | Wayland window and no-tray fallback validated locally |
 | Full Linux desktops | GNOME/KDE/Xfce tray behavior still needs testing |
 
-Missing or rotated logs can leave gaps. Final server-confirmed service tiers are not currently extracted. Remote hosts, other clients, cost tracking, and changing Codex settings are outside the current scope.
+Missing or rotated logs can leave gaps. Server-confirmed service tiers remain unknown unless an explicit value is available in a supported response. Remote hosts, other clients, cost tracking, and changing Codex settings are outside the current scope.
+
+Version 0.1.6 adds bounded `.jsonl.zst` history recovery, SQLite schema checks across current/historical layouts, and older diagnostic item formats. Validated SSE/WebSocket response sequences now contribute to normal statistics, with exact cross-source deduplication, incremental recovery and explicit server-returned tiers. Incomplete or conflicting evidence remains excluded from TPS. These adapters inspect available evidence rather than version labels. See the [changelog](CHANGELOG.md#016--validated-transport-measurements-and-historical-recovery).
+
+Explicit scoped sampling retries also invalidate session intervals that span the interruption, including saved measurements. Tokens are retained; waiting time is never estimated or subtracted, and high or low rates alone do not trigger exclusion.
 
 Windows portable builds include dependency notices, corresponding Qt/PySide sources, and SHA-256 checksums. Clean-machine Windows testing remains pending. There is no PyPI release or Linux binary yet. [Compatibility](docs/compatibility.md) · [Build instructions](docs/development.md#builds)
 

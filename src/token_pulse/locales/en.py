@@ -258,6 +258,17 @@ MESSAGES = {
     "累计增量与本次用量不一致": "Cumulative increment differs from response usage",
     "统计方式": "Calculation",
     "缺少前一次用量快照": "Previous usage snapshot missing",
+    "缺少传输序列起点": "Transport sequence start missing",
+    "缺少传输进程标识": "Transport process identity missing",
+    "传输事件序列不完整": "Incomplete transport sequence",
+    "传输事件格式尚不支持": "Unsupported transport event format",
+    "传输记录存在矛盾": "Conflicting transport records",
+    "跨来源用量冲突": "Conflicting usage across sources",
+    "传输记录超过解析上限": "Transport parser capacity exceeded",
+    "传输日志边界": "Transport log boundaries",
+    "输出跨度内有断流重试，无法确认连续生成计时": (
+        "Stream retry within output; continuous timing unconfirmed"
+    ),
     "缺少或跳过了会话记录": "Missing or skipped session records",
     "缺少首个输出起点": "First output start missing",
     "观测详情": "Details",

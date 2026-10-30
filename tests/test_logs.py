@@ -1,6 +1,39 @@
 import sqlite3
 
+import pytest
+
 from token_pulse.logs import LogEvidence, SqliteLogs, read_only
+
+
+@pytest.mark.parametrize("identifier", ['"item"', 'Some("item")'])
+def test_legacy_debug_start_uses_outer_identity_and_skips_content(identifier):
+    logs = LogEvidence()
+    tail = (
+        f"Output item item=Reasoning {{ id: {identifier}, "
+        'summary: ["ToolCall: fake"], content: None }'
+    )
+    logs.accept("task", 10, "codex_core::stream_events_utils", f'turn{{turn.id="turn"}}: {tail}')
+    assert logs.starts["task", "item"].at == 10
+    assert "ToolCall" not in repr(logs.__dict__)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        'turn{turn.id=one}:sampling{turn_id=two}: Output item item_type="message" item_id="item"',
+        "session_loop{thread_id=foreign}:turn{turn.id=turn}: "
+        'Output item item_type="message" item_id="item"',
+        'turn{note="turn.id=turn"}: Output item item_type="message" item_id="item"',
+        'turn{turn.id=turn}: Output item item=Message { content: "id: fake" }',
+        'turn{turn.id=turn}: Output item item=Message { id: "one", id: "two" }',
+        'turn{turn.id=turn}:handle_output_item_done: Output item item=Message { id: "item" }',
+        'turn{turn.id=turn}: Output item item=Message { id: "item", content: [',
+    ],
+)
+def test_old_and_new_start_formats_reject_conflicting_nested_or_truncated_evidence(body):
+    logs = LogEvidence()
+    logs.accept("task", 10, "codex_core::stream_events_utils", body)
+    assert not logs.starts
 
 
 def body(item="a", *, handled=False):

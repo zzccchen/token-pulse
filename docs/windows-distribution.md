@@ -22,6 +22,7 @@ No library source has been patched by TokenPulse. The packaging selects componen
 | Python 3.13.7 | PSF and incorporated-software terms; runtime `Python-LICENSE.txt` and versioned Python license documentation are included |
 | OpenSSL 3.5.3 (`libcrypto`, used by Python hashing) | Apache-2.0; versioned license text and upstream README with copyright notices are included |
 | SQLite (Python runtime) | Public domain; the SQLite authors disclaim copyright in their source code |
+| pyzstd 0.18.0 and incorporated Zstandard (new source builds) | BSD-3-Clause; `notices/pyzstd/LICENSE` and `LICENSE_zstd` are required by the builder |
 | Microsoft Visual C++ runtime DLLs | Microsoft Distributable Code terms reproduced in `Python-LICENSE.txt`; these terms apply only to those DLLs, not to TokenPulse or the LGPL libraries |
 | PyInstaller bootloader and runtime hooks | GPL with the application-distribution exception; the complete upstream `COPYING.txt` is included |
 
@@ -59,6 +60,8 @@ For TokenPulse, extract its source ZIP and run `uv sync --locked`, then `uv run 
 To reproduce the published portable packaging, use Python 3.13.7 and the locked packaging group as described in [development](https://github.com/zzccchen/token-pulse/blob/main/docs/development.md#builds). If building from the included source ZIP, first run `git init` and `git add .` inside that extracted source directory, then make a local commit so the builder can record its source inventory. The packaging script pins audited runtime/source versions and will stop on an unreviewed version change; this build-time check can be updated for your modified build. The executable itself has no such check.
 
 ## Verification limits
+
+The compressed-source changes add a native decoder dependency. Source tests and wheel builds do not establish frozen-binary readiness; re-run the release checks for a newly built ZIP before publishing it. Previously published ZIPs do not acquire this dependency or the new parser automatically.
 
 The release is unsigned. Automated checks cover startup and exit in isolated demo mode, file integrity, source/license presence, and loading replaceable libraries outside the source checkout. These checks do not establish a fresh Windows installation test or a manual check of every desktop interaction. Keep those limitations separate from the included license and source materials.
 

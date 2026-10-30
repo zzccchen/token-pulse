@@ -13,6 +13,7 @@ This is a version-scoped adapter reference, not a promise about future Codex for
 | `item_completed` | Item start/end millisecond timestamps | Non-tool timing may supplement logs; tool timing describes execution |
 | Thread-history SQLite | Derived turn/item projections | Not another independent source of samples |
 | Diagnostic SQLite | Output starts, submission/request/auth evidence | Retention and association limit availability |
+| Diagnostic SQLite SSE/WebSocket events | Completed-response usage, item timing and returned service tier | Only complete, identity-consistent supported sequences qualify for TPS |
 | Desktop logs | UI and transport diagnostics | Events without item IDs cannot establish precise boundaries |
 
 Historical upstream reference: [protocol definitions](https://github.com/openai/codex/blob/rust-v0.153.0/codex-rs/protocol/src/protocol.rs) and [thread-history projection](https://github.com/openai/codex/blob/rust-v0.153.0/codex-rs/app-server-protocol/src/protocol/thread_history_projection.rs). Tests in this repository are the executable contract for supported input shapes.
@@ -43,7 +44,7 @@ Recovery revision 7 also handles a terminal `cwd` on recognized sampling spans w
 
 The source review on 2026-10-22 used [sampling feedback emission](https://github.com/openai/codex/blob/86e17e98c7f901277aeeb4649cf1b01462b082f2/codex-rs/core/src/session/turn.rs) and the [scalar feedback tag builder](https://github.com/openai/codex/blob/86e17e98c7f901277aeeb4649cf1b01462b082f2/codex-rs/core/src/feedback_config.rs). The tier comes from the sampling step's settings. The builder represents an absent value as `unset`; the adapter retains that as unspecified, not as a clear instruction or explicit Standard setting. This source reference explains the interpretation and is not a claim that the installed binary was built from that commit.
 
-A display marker prefers request evidence, otherwise supported submitted settings. Source attribution and raw values remain in record details. The current adapter does not extract final server-confirmed tiers. Global configuration cannot fill historical request values.
+A display marker prefers request evidence, otherwise supported submitted settings. Source attribution and raw values remain in record details. Supported transport completions separately expose the server-returned `service_tier`; diagnostic configuration tags never populate that field. Global configuration cannot fill historical request values.
 
 ## Parser corrections
 
@@ -52,7 +53,44 @@ A display marker prefers request evidence, otherwise supported submitted setting
 | 2 | Complete response measurements can replace legacy split ranges; proven fork/snapshot duplicates can be withdrawn |
 | 3 | Tool-first measurements with unconfirmed full starts lose TPS while retaining identity and tokens |
 | 4 | Same-millisecond first-item placeholders without earlier matched starts are excluded |
+| 5 | Unknown output scopes and unvalidated legacy counters cannot produce TPS; retain explicit usage without items; replace adjacent, matching legacy usage without duplicating history |
+| 6 | Validate transport sequences and exact cross-source aliases; prefer complete transport timing and exclude conflicting usage or ambiguous response ownership |
+| 7 | Reject session intervals that cross explicit scoped sampling retries; correct saved measurements without estimating wait time; retain the original unsupported server-tool exclusion |
 
 New corrections must update parser/recovery versions as appropriate. Mere log absence cannot erase an existing valid measurement. Old parser writes must not restore proven invalid timing; repeated same-version withdrawals cannot remove already revalidated samples.
 
 Regression fixtures cover delayed usage, duplicate snapshots, resets/conflicts, fork boundaries, millisecond placeholders, earlier valid starts, cross-restart withdrawals, missing-turn reconciliation, and evidence enrichment. See `tests/test_rollout.py`, `tests/test_history.py`, and `tests/test_backfill.py`. Public fixtures are synthetic; private development logs are not part of the repository.
+
+## Capability-based historical formats
+
+Recovery revision 10 re-evaluates retained sources for parser revision 7 and scoped retry evidence, following the transport adapter in revision 9 and historical adapters in revision 8. Runtime decisions use actual fields and container formats, not `cli_version`, model names, machine-specific paths, or observed speed. Session creation labels are not reliable writer-version boundaries: migration and later appends can change a file's format.
+
+| Observed capability | Adapter behavior |
+| --- | --- |
+| Required SQLite index/log columns in the root or historical `sqlite/` directory | Select a compatible database; newer incompatible names do not hide usable older schemas |
+| Plain JSONL or a `.jsonl.zst` sibling | Decode bounded chunks with the same event parser and stable sample identities |
+| Legacy cumulative usage with complete matching counters | Validate the increment before measuring; missing IDs/timing remain exclusions |
+| Explicit per-response usage and non-tool lifecycle timestamps | Preserve response identity and use only matching positive timing boundaries |
+| Diagnostic `item_type`/`item_id` fields or outer Rust Debug `Message`/`Reasoning`/tool objects | Extract bounded outer item identity and consistent task/turn scope; skip nested content |
+| `subagent_history_start_ordinal` | Withdraw copied-prefix output; missing ordinals cannot establish ownership |
+| `history_base` reference | Do not follow the parent or count its output as the child's |
+
+## Transport event validation
+
+The production adapter reads compatible SQLite `logs` tables for the targets `codex_api::sse::responses` and `codex_api::endpoint::responses_websocket`. Required columns are `id`, `ts`, `ts_nanos`, `thread_id`, `target` and `feedback_log_body`. `process_uuid` supplies process identity; without it, completed usage can be retained but cannot establish valid timing. Process, task, turn, response and item IDs are opaque identifiers, not prescribed UUID or model-name formats.
+
+Recognized scoped outer messages are `SSE event:`, `sse event:`, `websocket event:` and `event:` followed by JSON, JSON-quoted JSON or a single SSE data frame. All observed task/turn scopes must agree; optional request/connection IDs refine routing. Nested content cannot provide routing identity. Plain desktop text files and arbitrary Debug event renderings are not additional transport feeds.
+
+Each stream requires a created event at sequence zero, contiguous integer sequence numbers, consistent response identity, ordered supported items, matching content/summary parts and channel completion, then successful completed status and integer output usage. Exact replay is ignored; conflicting duplicates, gaps, out-of-order timestamps, unsupported event/item types and incomplete boundaries exclude TPS. Supported generated items are messages, reasoning, function calls and custom tool calls. A tool-first response still lacks a proven complete start. Interleaved explicit response IDs are tracked independently; id-less events with multiple possible owners are ambiguous.
+
+Final response output arrays may be empty. Only a validated full event inventory can compensate; a terminal event alone cannot. Delta-event counts are not token counts, and integer server timestamps are not decode durations. Client log item timestamps determine the interval, while final response usage determines tokens. In-memory HMACs detect replay conflicts without retaining content in parser state. Persisted aliases require the exact complete ordered item set, never estimated time/token matches.
+
+The reader incrementally replays only a bounded seven-day source window and saves quiescent cursors after samples are durable. Unsupported or incomplete sequences remain excluded observations when response identity is available. Thread-history projections remain outside production sample feeds. See `tests/test_transport.py` and `tests/test_transport_logs.py` for synthetic format, concurrency, conflict, privacy and recovery regressions.
+
+## Sampling interruptions and timing limits
+
+The adapter recognizes bounded outer warnings from `codex_core::responses_retry`, with consistent task/turn scopes, `handle_response_stream_error{request=Sampling}` and a matching outer `turn_id`. Supported messages identify connection-retry waits or disconnected sampling retries. It skips error text, remote-compaction retries, nested lookalikes and conflicting identities. The [upstream retry handler](https://github.com/openai/codex/blob/main/codex-rs/core/src/responses_retry.rs) distinguishes sampling from remote compaction and sleeps between attempts; this source reference explains the interpretation, not the version of an installed binary. Synthetic tests in `tests/test_retry_evidence.py` define supported shapes.
+
+Session output items can survive a failed attempt without a closing usage record, then be joined to a later successful response in the same turn. A start/end pair spanning an explicit retry therefore cannot measure continuous output. Retry evidence participates in recovery invalidation and exact pseudonymized history correction. Tokens remain available; retry duration is never guessed or subtracted.
+
+Short positive spans have a different limitation: diagnostic item notifications and lifecycle timestamps can originate from the same received event batch. They do not independently certify server generation speed. Absent complete matching transport records, the adapter cannot identify a buffering delay or reconstruct a more accurate rate. Large TPS values are not removed solely for their magnitude.

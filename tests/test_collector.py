@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -31,7 +32,7 @@ def make_source(root):
         )
         + "\n"
     )
-    with sqlite3.connect(root / "state_5.sqlite") as c:
+    with closing(sqlite3.connect(root / "state_5.sqlite")) as c, c:
         c.execute("CREATE TABLE threads(id,rollout_path,title,archived,updated_at)")
         c.execute("INSERT INTO threads VALUES(?,?,?,0,1)", ("task", str(path), "PRIVATE TITLE"))
     return path

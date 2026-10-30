@@ -29,7 +29,7 @@
 
 ## 快速体验
 
-**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.5) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
+**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.6) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
 
 **从源码运行（Windows 或 Linux）：**需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
@@ -69,7 +69,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 ## 当前状态与边界
 
-项目处于 **0.1.5** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
+项目处于 **0.1.6** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |
@@ -77,7 +77,11 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 | Ubuntu 24.04 WSL2 | 已在本机验证 Wayland 窗口与无托盘回退 |
 | 完整 Linux 桌面 | GNOME/KDE/Xfce 托盘行为仍待验证 |
 
-日志缺失或轮转可能造成数据空缺。当前尚未读取最终服务端确认层级。远程主机、其他客户端、费用统计和修改 Codex 设置不在当前范围内。
+日志缺失或轮转可能造成数据空缺。仅在支持的响应中存在明确值时记录服务端确认层级，否则保持未知。远程主机、其他客户端、费用统计和修改 Codex 设置不在当前范围内。
+
+0.1.6 新增了有界 `.jsonl.zst` 历史恢复、新旧存储位置的 SQLite 结构检查和旧式诊断条目解析。通过校验的 SSE/WebSocket 响应序列已接入正常统计，并支持跨来源精确去重、增量恢复和明确的服务端返回层级；不完整或冲突的证据仍不计算 TPS。适配依据实际证据，不依赖版本标签，详见[变更记录](CHANGELOG.md#016--validated-transport-measurements-and-historical-recovery)。
+
+同一作用域内明确的采样重试会使跨越该中断的会话计时失效，已保存的测量也会得到纠正。保留 token，不估算或扣减等待时间，也不单凭速度过高或过低排除记录。
 
 Windows 便携包附带依赖许可说明、对应 Qt/PySide 源码和 SHA-256 校验值。干净 Windows 机器测试仍待完成。尚未发布 PyPI 包或 Linux 二进制文件。[兼容性](docs/compatibility.md) · [构建说明](docs/development.md#builds)
 

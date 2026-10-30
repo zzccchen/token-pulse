@@ -4,18 +4,99 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from bisect import bisect_left, bisect_right, insort
 from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from token_pulse.submissions import ConfigurationTag, SubmittedTier, feedback_tier, submitted_tier
+from token_pulse.submissions import (
+    _TRACE_SPAN,
+    ConfigurationTag,
+    SubmittedTier,
+    _fields,
+    _trace_fields,
+    feedback_tier,
+    submitted_tier,
+)
 
 _START = re.compile(
     r'^Output item item_type="(reasoning|message|function_call|custom_tool_call)" '
     r'item_id="([\w-]{1,160})"$'
 )
 _TURN = re.compile(r'(?:turn\.id|turn_id)="?([\w-]{1,100})')
+
+
+def database_candidates(root: Path, stem: str) -> list[Path]:
+    """Known local layouts only; prefer the current root over retained copies."""
+    paths = []
+    for directory in (root, root / "sqlite"):
+        versions = []
+        for path in directory.glob(f"{stem}_*.sqlite"):
+            match = re.fullmatch(rf"{re.escape(stem)}_(\d+)\.sqlite", path.name)
+            if match and path.resolve().is_relative_to(root.resolve()):
+                versions.append((int(match[1]), path))
+        paths.extend(path for _, path in sorted(versions, reverse=True))
+    return paths
+
+
+def compatible_database(root: Path, stem: str, table: str, required: set[str]) -> Path | None:
+    for path in database_candidates(root, stem):
+        try:
+            with closing(read_only(path)) as db:
+                columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                if required <= columns:
+                    return path
+        except (OSError, sqlite3.Error):
+            continue
+    return None
+
+
+def diagnostic_scope(task: str, prefix: str) -> str | None:
+    """Read only tracing-span fields; strings and message bodies cannot supply IDs."""
+    if len(prefix) > 4000:
+        return None
+    turns = set()
+    position = 0
+    try:
+        for match in _TRACE_SPAN.finditer(prefix):
+            if not re.fullmatch(r"(?::?[\w.]+:)*:?", prefix[position : match.start()]):
+                return None
+            fields = _trace_fields(
+                match[2],
+                display_cwd=match[1] in {"run_sampling_request", "try_run_sampling_request"},
+            )
+            for name in ("thread_id", "thread.id", "conversation.id"):
+                if name in fields and fields[name] != task:
+                    return None
+            turns.update(fields[name] for name in ("turn_id", "turn.id") if name in fields)
+            position = match.end()
+        if not re.fullmatch(r"(?::?[\w.]+)*:?", prefix[position:]):
+            return None
+    except ValueError:
+        return None
+    if len(turns) != 1:
+        return None
+    turn = next(iter(turns))
+    return turn if re.fullmatch(r"[\w-]{1,100}", turn) else None
+
+
+def output_start(tail: str) -> str | None:
+    match = _START.fullmatch(tail)
+    if match:
+        return match[2]
+    # Older diagnostics render Rust Debug objects. Only the outer id field
+    # supplies identity; content/arguments are structurally skipped and discarded.
+    header = re.match(r"Output item item=(Reasoning|Message|FunctionCall|CustomToolCall) \{", tail)
+    if not header:
+        return None
+    try:
+        fields = _fields(tail[len("Output item item=") :], header[1])
+    except ValueError:
+        return None
+    raw = fields.get("id", "")
+    match = re.fullmatch(r'(?:"([\w-]{1,160})"|Some\("([\w-]{1,160})"\))', raw)
+    return (match[1] or match[2]) if match else None
 
 
 def label(value: object) -> str | None:
@@ -48,9 +129,29 @@ class LogEvidence:
         self.submissions: OrderedDict[tuple[str, str], SubmittedTier] = OrderedDict()
         self.config_tags: OrderedDict[tuple[str, str], ConfigurationTag] = OrderedDict()
         self.capacity = capacity
+        self.interruptions: dict[tuple[str, str], list[float]] = {}
+        self.interruption_order: OrderedDict[tuple[str, str, float], None] = OrderedDict()
+
+    def record_interruption(self, task: str, turn: str, at: float) -> None:
+        key = task, turn, at
+        if key in self.interruption_order:
+            return
+        self.interruption_order[key] = None
+        insort(self.interruptions.setdefault((task, turn), []), at)
+        while len(self.interruption_order) > self.capacity:
+            (old_task, old_turn, old_at), _ = self.interruption_order.popitem(last=False)
+            times = self.interruptions[old_task, old_turn]
+            times.pop(bisect_left(times, old_at))
+            if not times:
+                del self.interruptions[old_task, old_turn]
+
+    def interrupted(self, task: str, turn: str, start: float, end: float) -> bool:
+        times = self.interruptions.get((task, turn), [])
+        index = bisect_right(times, start)
+        return index < len(times) and times[index] < end
 
     def accept(self, task: str, at: float, target: str, body: str) -> None:
-        if not task or not body:
+        if not task or not body or len(body) > 16000:
             return
         if target in {"codex_core::session::handlers", "feedback_tags"}:
             parse_tier = submitted_tier if target.endswith("::handlers") else feedback_tier
@@ -73,14 +174,32 @@ class LogEvidence:
                     settings.popitem(last=False)
                 if target == "codex_core::session::handlers":
                     return
-        if "ToolCall:" in body:
-            return
         # Limit pattern work; never inspect arbitrary tool bodies for markers.
-        prefix, _, tail = body.rpartition(": ")
+        prefix, _, tail = body.partition(": ")
         if not prefix:
             tail = body
-        turn = _TURN.search(prefix[:2000])
-        turn_id = turn[1] if turn else ""
+        turn_id = diagnostic_scope(task, prefix) or ""
+        if target == "codex_core::responses_retry" and turn_id:
+            # Read a known outer warning and Sampling scope only. Error strings,
+            # remote compaction and arbitrary messages cannot supply evidence.
+            message = re.match(
+                r"(?:stream connection failed; waiting to retry|"
+                r"stream disconnected - retrying sampling request "
+                r"\(\d+/\d+ in [0-9.]+(?:ns|µs|ms|s)\)\.\.\.) "
+                r'turn_id=(?:"([^"\s]{1,256})"|([^\s]{1,256}))(?: |$)',
+                tail,
+            )
+            if message and (message[1] or message[2]) == turn_id:
+                try:
+                    requests = [
+                        _trace_fields(span[2]).get("request")
+                        for span in _TRACE_SPAN.finditer(prefix)
+                        if span[1] == "handle_response_stream_error"
+                    ]
+                except ValueError:
+                    requests = []
+                if requests and all(request == "Sampling" for request in requests):
+                    self.record_interruption(task, turn_id, at)
         if target == "feedback_tags" and len(body) < 16000 and "stream_request{" in prefix:
             auth = re.search(r'\bauth_mode="?(Chatgpt|ApiKey|ChatgptAuthTokens)\b', tail)
             request = re.search(r"stream_request\{([^{}]*)\}", prefix)
@@ -93,9 +212,9 @@ class LogEvidence:
             if len(self.requests) > 1024:
                 self.requests.pop(next(iter(self.requests)))
         if target == "codex_core::stream_events_utils" and "handle_output_item_done" not in prefix:
-            match = _START.fullmatch(tail) if len(tail) < 400 else None
-            if match and turn_id:
-                key = task, match[2]
+            item_id = output_start(tail)
+            if item_id and turn_id:
+                key = task, item_id
                 request = self.requests.get((task, turn_id))
                 auth, tier = request[1:] if request and request[0] <= at else (None, None)
                 start = Start(at, turn_id, auth, tier)
@@ -155,6 +274,8 @@ class SqliteLogs:
                     self.evidence.requests.clear()
                     self.evidence.submissions.clear()
                     self.evidence.config_tags.clear()
+                    self.evidence.interruptions.clear()
+                    self.evidence.interruption_order.clear()
                     # Submission rows are sparse. The normal ID window can miss
                     # them even while they remain in the database. Backfill this
                     # one target separately, once per database reset, with a cap.
@@ -174,8 +295,13 @@ class SqliteLogs:
                         "SELECT ts, ts_nanos, thread_id, target, "
                         "CASE WHEN length(feedback_log_body) <= 16000 THEN feedback_log_body END "
                         "FROM logs WHERE id IN (SELECT id FROM logs WHERE id <= ? "
-                        "AND target IN (?,?) ORDER BY id DESC LIMIT 40000) ORDER BY id",
-                        (maximum, "feedback_tags", "codex_core::stream_events_utils"),
+                        "AND target IN (?,?,?) ORDER BY id DESC LIMIT 40000) ORDER BY id",
+                        (
+                            maximum,
+                            "feedback_tags",
+                            "codex_core::stream_events_utils",
+                            "codex_core::responses_retry",
+                        ),
                     )
                     for row in events:
                         self._accept_row(*row)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from statistics import median
 
-from token_pulse.domain import Sample, reconcile
+from token_pulse.domain import Sample, reconcile, resolve_response_alias, response_alias_index
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,9 @@ class Summary:
 def unique(samples: list[Sample]) -> list[Sample]:
     """Prefer a repaired complete sample over its earlier incomplete observation."""
     result: dict[tuple, Sample] = {}
+    owners = response_alias_index(samples)
     for sample in samples:
+        sample = resolve_response_alias(sample, owners)
         previous = result.get(sample.key)
         result[sample.key] = sample if previous is None else reconcile(previous, sample)
     return sorted(result.values(), key=lambda s: s.ended_at)

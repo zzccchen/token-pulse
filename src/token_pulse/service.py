@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 
 from token_pulse.collector import Collector, Snapshot
@@ -64,6 +65,11 @@ class Monitor:
                         historical = tuple(candidate.read())
                         collector.backfill.checkpoints = candidate.source_checkpoints()
                         collector.backfill.checkpoint_key = candidate.source_key
+                        collector.transport_checkpoints = candidate.transport_checkpoints()
+                        collector.transport_key = partial(candidate.source_key, "transport")
+                        collector.transport_digest = partial(
+                            candidate.anonymous_id, "transport-cursor"
+                        )
                         history = candidate
                     except Exception:
                         if candidate is not None:
@@ -78,7 +84,10 @@ class Monitor:
                 pending = unique([*pending, *snapshot.samples])[-limit:]
                 for sample in snapshot.rejected_samples:
                     previous = rejected.get(sample.key)
-                    if previous is None or previous.issue != "inherited_history":
+                    if previous is None or previous.issue not in {
+                        "inherited_history",
+                        "superseded_usage",
+                    }:
                         rejected[sample.key] = sample
                 if len(rejected) > 2 * limit:
                     rejected = dict(list(rejected.items())[-2 * limit :])
@@ -88,11 +97,14 @@ class Monitor:
                     history.reject(list(rejected.values()), now=snapshot.at)
                     history.append(pending, now=snapshot.at)
                     historical = tuple(
-                        history.enrich_config_tags(
-                            history.enrich_submissions(
-                                history.read(), collector.evidence.submissions
+                        history.enrich_interruptions(
+                            history.enrich_config_tags(
+                                history.enrich_submissions(
+                                    history.read(), collector.evidence.submissions
+                                ),
+                                collector.evidence.config_tags,
                             ),
-                            collector.evidence.config_tags,
+                            collector.evidence.interruptions,
                         )
                     )
                     if collector.backfill.completed:
@@ -101,6 +113,11 @@ class Monitor:
                             (key, value[0]) for key, value in collector.backfill.completed.items()
                         )
                         collector.backfill.completed.clear()
+                    if getattr(collector, "transport_completed", None):
+                        history.save_transport_checkpoints(
+                            collector.transport_completed, now=snapshot.at
+                        )
+                        collector.transport_completed.clear()
                     pending.clear()
                     rejected.clear()
                 except Exception:
@@ -129,7 +146,9 @@ class Monitor:
                 # Historical recovery runs in bounded chunks and publishes each chunk;
                 # idle/live polling returns to the normal low-frequency interval.
                 self.stopped.wait(
-                    min(self.interval, 0.25) if snapshot.backfill_pending else self.interval
+                    min(self.interval, 0.25)
+                    if snapshot.backfill_pending or snapshot.transport_pending
+                    else self.interval
                 )
         finally:
             if history is not None:

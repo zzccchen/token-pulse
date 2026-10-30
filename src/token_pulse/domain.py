@@ -43,6 +43,8 @@ class Sample:
     issue: str | None = None
     parser_revision: int = 1
     timing_source: str | None = None
+    response_aliases: tuple[str, ...] = ()
+    evidence_sources: tuple[str, ...] = ()
 
     @property
     def exclusion(self) -> str | None:
@@ -90,21 +92,102 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     """Preserve complete measurements while independently refreshing tier evidence."""
     if previous.key != incoming.key:
         raise ValueError("Cannot reconcile different output samples")
+    sources = tuple(
+        sorted(
+            set(
+                (
+                    previous.source,
+                    incoming.source,
+                    *previous.evidence_sources,
+                    *incoming.evidence_sources,
+                )
+            )
+        )
+    )
+    aliases = tuple(sorted(set((*previous.response_aliases, *incoming.response_aliases))))
+    transport = "codex-transport-log-v1" in sources
+    conflicts = {
+        "transport_conflict",
+        "cross_source_conflict",
+        "ambiguous_response_identity",
+        "interrupted_response",
+    }
+    reliable_usage_issues = {
+        None,
+        "missing_start",
+        "missing_stream_start",
+        "missing_output_items",
+        "unconfirmed_tool_start",
+        "unconfirmed_initial_span",
+    }
+    token_conflict = (
+        transport
+        and previous.parser_revision == incoming.parser_revision
+        and previous.issue in reliable_usage_issues
+        and incoming.issue in reliable_usage_issues
+        and type(previous.output_tokens) is int
+        and type(incoming.output_tokens) is int
+        and previous.output_tokens != incoming.output_tokens
+    )
+    preferred_transport = (
+        incoming.timing_source == "transport-log"
+        and incoming.exclusion is None
+        and previous.timing_source != "transport-log"
+        and incoming.parser_revision >= previous.parser_revision
+    )
     revised_measurement = (
         incoming.parser_revision > previous.parser_revision and incoming.exclusion is None
     )
-    withdrawals = {"unconfirmed_tool_start", "unconfirmed_initial_span"}
+    withdrawals = {
+        "unconfirmed_tool_start",
+        "unconfirmed_initial_span",
+        "unsupported_output_item",
+        "missing_usage_baseline",
+        "usage_counter_reset",
+        "usage_scope_mismatch",
+        "missing_item_id",
+        "missing_history_ordinal",
+        "interrupted_response",
+    }
     revised_boundary = (
         incoming.parser_revision > previous.parser_revision and incoming.issue in withdrawals
+    )
+    extended_boundary = (
+        incoming.parser_revision == previous.parser_revision
+        and incoming.exclusion is None
+        and previous.exclusion is None
+        and incoming.source == previous.source
+        and incoming.token_scope == previous.token_scope
+        and incoming.output_tokens == previous.output_tokens
+        and incoming.ended_at == previous.ended_at
+        and incoming.started_at < previous.started_at
+        and incoming.timing_source == "stream-log"
+        and previous.timing_source == "item-event"
     )
     if previous.issue in withdrawals and previous.parser_revision > incoming.parser_revision:
         base = previous
     else:
         base = (
             incoming
-            if previous.exclusion is not None or revised_measurement or revised_boundary
+            if previous.exclusion is not None
+            or revised_measurement
+            or revised_boundary
+            or extended_boundary
+            or preferred_transport
             else previous
         )
+    if token_conflict:
+        base = replace(base, issue="cross_source_conflict")
+    for observation in (previous, incoming):
+        if (
+            observation.issue == "interrupted_response"
+            and base.timing_source == "transport-log"
+            and base.exclusion is None
+            and base.parser_revision >= observation.parser_revision
+        ):
+            continue  # A complete exact response sequence independently proves its interval.
+        if observation.issue in conflicts and observation.parser_revision >= base.parser_revision:
+            base = replace(base, issue=observation.issue)
     evidence = (
         incoming.context if incoming.context.submitted_tier_state is not None else previous.context
     )
@@ -113,18 +196,62 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     )
     return replace(
         base,
+        response_aliases=aliases,
+        evidence_sources=sources
+        if transport or previous.evidence_sources or incoming.evidence_sources
+        else (),
         context=replace(
             base.context,
-            provider=base.context.provider or previous.context.provider,
-            auth_mode=base.context.auth_mode or previous.context.auth_mode,
-            requested_tier=base.context.requested_tier or previous.context.requested_tier,
-            actual_tier=base.context.actual_tier or previous.context.actual_tier,
+            model=base.context.model or previous.context.model or incoming.context.model,
+            effort=base.context.effort or previous.context.effort or incoming.context.effort,
+            provider=base.context.provider
+            or previous.context.provider
+            or incoming.context.provider,
+            auth_mode=base.context.auth_mode
+            or previous.context.auth_mode
+            or incoming.context.auth_mode,
+            requested_tier=base.context.requested_tier
+            or previous.context.requested_tier
+            or incoming.context.requested_tier,
+            actual_tier=base.context.actual_tier
+            or previous.context.actual_tier
+            or incoming.context.actual_tier,
             submitted_tier=evidence.submitted_tier,
             submitted_tier_state=evidence.submitted_tier_state,
             config_tag_tier=config_tag.config_tag_tier,
             config_tag_state=config_tag.config_tag_state,
         ),
     )
+
+
+def response_alias_index(samples: list[Sample]) -> dict[tuple, set[str]]:
+    owners: dict[tuple, set[str]] = {}
+    for sample in samples:
+        if not sample.turn_id:
+            continue  # An alias cannot infer a turn from timestamp proximity.
+        for alias in sample.response_aliases:
+            if alias != sample.response_id:
+                owners.setdefault((sample.task_id, sample.turn_id, alias), set()).add(
+                    sample.response_id
+                )
+    return owners
+
+
+def resolve_response_alias(sample: Sample, owners: dict[tuple, set[str]]) -> Sample:
+    keys = [
+        sample.key,
+        *((sample.task_id, sample.turn_id, alias) for alias in sample.response_aliases),
+    ]
+    if any(len(owners.get(key, ())) > 1 for key in keys):
+        return replace(sample, issue="ambiguous_response_identity")
+    canonical = owners.get(sample.key, set())
+    if len(canonical) == 1:
+        return replace(
+            sample,
+            response_id=next(iter(canonical)),
+            response_aliases=tuple(sorted(set((*sample.response_aliases, sample.response_id)))),
+        )
+    return sample
 
 
 @dataclass(frozen=True)

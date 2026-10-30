@@ -34,6 +34,8 @@ def main() -> int:
     for name in ("PySide6-Essentials", "shiboken6"):
         if importlib.metadata.version(name) != "6.11.2":
             raise RuntimeError("Re-audit Qt sources and notices before changing Qt 6.11.2")
+    if importlib.metadata.version("pyzstd") != "0.18.0":
+        raise RuntimeError("Re-audit pyzstd and bundled zstd notices before changing pyzstd 0.18.0")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=root / "dist" / "windows")
     args = parser.parse_args()
@@ -61,12 +63,20 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
-    for name in ("PySide6-Essentials", "shiboken6", "pyinstaller"):
+    for name in ("PySide6-Essentials", "shiboken6", "pyinstaller", "pyzstd"):
         distribution = importlib.metadata.distribution(name)
+        if name == "pyzstd":
+            available = {entry.name for entry in distribution.files or ()}
+            if not {"LICENSE", "LICENSE_zstd"} <= available:
+                raise RuntimeError("Missing pyzstd / zstd license texts")
         for entry in distribution.files or ():
             if ".dist-info/" not in str(entry):
                 continue
-            if "licenses" not in entry.parts and entry.name != "METADATA":
+            if (
+                "licenses" not in entry.parts
+                and entry.name != "METADATA"
+                and not entry.name.lower().startswith(("license", "copying", "notice"))
+            ):
                 continue
             destination = notices / name / Path(*entry.parts[1:])
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -154,7 +164,7 @@ def main() -> int:
         "architecture": platform.machine(),
         "dependencies": {
             name: importlib.metadata.version(name)
-            for name in ("PySide6-Essentials", "shiboken6", "pyinstaller")
+            for name in ("PySide6-Essentials", "shiboken6", "pyinstaller", "pyzstd")
         },
         "openssl": ssl.OPENSSL_VERSION,
         "signed": False,

@@ -1,7 +1,7 @@
 import pytest
 
 from token_pulse.logs import LogEvidence, Start
-from token_pulse.rollout import REJECTIONS, Rollout, duration
+from token_pulse.rollout import PARSER_REVISION, REJECTIONS, Rollout, duration
 
 
 def event(parser, kind, payload, second):
@@ -31,7 +31,7 @@ def usage(parser, response="response", second=13):
         {
             "response_id": response,
             "thread_id": "task",
-            "turn_id": "turn",
+            "turn_id": parser.turn_id,
             "usage": {"output_tokens": 100},
         },
         second,
@@ -199,7 +199,7 @@ def test_duplicate_usage_and_legacy_token_count_do_not_double_count():
     assert len(parser.samples(evidence())) == 1
 
 
-def test_legacy_usage_with_output_boundary():
+def test_legacy_usage_without_cumulative_validation_retains_tokens_without_tps():
     parser = ready()
     output(parser)
     event(
@@ -208,7 +208,9 @@ def test_legacy_usage_with_output_boundary():
         {"type": "token_count", "info": {"last_token_usage": {"output_tokens": 100}}},
         13,
     )
-    assert parser.samples(evidence())[0].tps == 50
+    sample = parser.samples(evidence())[0]
+    assert sample.output_tokens == 100
+    assert sample.exclusion == "missing_usage_baseline"
 
 
 def test_backfill_without_turn_boundary_is_excluded():
@@ -335,7 +337,7 @@ def test_legacy_usage_after_tool_result_excludes_the_tool_wait():
     sample = parser.samples(evidence())[0]
     assert sample.tps == 50
     assert sample.seconds == 2
-    assert sample.parser_revision == 4
+    assert sample.parser_revision == PARSER_REVISION
 
 
 def test_stale_usage_does_not_split_the_next_response_or_reuse_old_tokens():
@@ -520,21 +522,22 @@ def test_tool_first_notification_does_not_cover_full_response_tokens(kind, token
     assert value.started_at is None and value.tps is None
     assert value.issue == "unconfirmed_tool_start"
     assert value.timing_source == "tool-item-notification"
-    assert value.parser_revision == 4
+    assert value.parser_revision == PARSER_REVISION
 
 
-def test_short_text_with_matching_start_is_not_rejected_based_on_its_speed():
+@pytest.mark.parametrize("tokens", [14, 312])
+def test_short_text_with_matching_start_is_not_rejected_based_on_its_speed(tokens):
     parser = ready()
     output(parser, second=13)
     event(
         parser,
         "token_usage_record",
-        {"response_id": "response", "usage": {"output_tokens": 14}},
+        {"response_id": "response", "usage": {"output_tokens": tokens}},
         14,
     )
     value = parser.samples(evidence(second=12.922))[0]
     assert value.exclusion is None
-    assert value.tps == pytest.approx(14 / 0.078, rel=1e-5)
+    assert value.tps == pytest.approx(tokens / 0.078, rel=1e-5)
 
 
 @pytest.mark.parametrize(

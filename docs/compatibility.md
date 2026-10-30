@@ -48,11 +48,14 @@ Tray support depends on desktop protocols and extensions. Use `--no-tray` as a n
 | Source | Used for | Boundary |
 | --- | --- | --- |
 | `state_*.sqlite / threads` | Indexed paths, recent task snapshots, model and provider context | Current settings cannot fill historical request values |
-| Session JSONL | Turn context, output items, usage, lifecycle events and state | Inherited history and repeated usage are not new output |
+| Session JSONL / `.jsonl.zst` | Turn context, output items, usage, lifecycle events and state | Inherited history and repeated usage are not new output; compressed archives are recovered sequentially |
 | `logs_*.sqlite / logs` | Item starts, scoped submissions and configuration tags, request/auth evidence, explicit ignored-tier warnings | Only known outer structures and event shapes are parsed |
+| SSE/WebSocket events in compatible `logs` tables | Completed-response usage, client item timing, explicit returned service tier | Contiguous sequences, unambiguous routing and complete item/content boundaries are required |
 | `config.toml` | Current global `service_tier` snapshot | Does not resolve every project, task, or CLI override |
 
-Final server-confirmed tier extraction is not implemented. Old request/response formats observed in research do not establish evidence for current requests. See [measurement](measurement.md) and [source evidence](source-audit.md).
+The 0.1.6 transport adapter extracts an explicit `response.completed.response.service_tier` separately from client settings and request evidence. Missing fields remain unknown. Historical responses do not establish evidence for current requests. See [measurement](measurement.md) and [source evidence](source-audit.md).
+
+The 0.1.6 historical-format changes select databases by required tables/columns, checking both the root and its `sqlite/` directory, with an embedded `state_*.sqlite / logs` fallback. They recognize bounded older Debug item notifications and current scalar notifications. One compatible index and general diagnostic database is selected. Transport recovery separately considers up to eight compatible stores, validates each stream independently, and deduplicates normalized records across copies and session files using exact identities. This is format-shape support, not a claim of compatibility with every intervening Codex release.
 
 ## Bounded collection
 
@@ -61,7 +64,10 @@ Final server-confirmed tier extraction is not implemented. Old request/response 
 - Historical recovery: indexed sessions updated within seven days, including archived sessions, independent of live limits; from the beginning of each file in chunks of up to 8 MiB and 16 file operations per batch. New/changed files are discovered every 60 seconds; active recovery batches are spaced at most 0.25 seconds apart.
 - Without a usable index: probe the most recent three date directories and session-root files, rather than recursively scanning all history.
 - JSONL lines: at most 8 MiB. Partial lines wait for completion; interrupted files are not marked fully recovered.
-- Diagnostic logs: initial general ID window of 50,000, advancing by at most 10,000 rows per poll. Separate bounded startup passes cover up to 2,000 submission rows and 40,000 relevant output/auth events, with 16,000-character row limits and a 20,000-entry output-start cache.
+- Compressed recovery: both compressed input and decoded output count against the batch budget; decoder chunks are at most 64 KiB with a 128 MiB maximum compression window. Concatenated frames are supported. Truncated/corrupt frames, partial lines, and changed containers cannot commit completion checkpoints. Decoded session content is never written to disk. Compressed files use recovery rather than the live-tail cache.
+- Diagnostic logs: initial general ID window of 50,000, advancing by at most 10,000 rows per poll. Separate bounded startup passes cover up to 2,000 submission rows and 40,000 relevant output/auth/retry events, with 16,000-character row limits, a 20,000-entry output-start cache and a separate 20,000-event retry index. Retry timestamps are scoped and sorted; rereads do not add duplicates.
+- Transport logs: discover up to eight compatible stores every 60 seconds; initial recovery considers the last 50,000 relevant rows within seven days per store. Poll at most 1,000 rows / 4 MiB per reader, sharing an 8 MiB budget across readers with rotating priority. Each event body is at most 2 MiB. Per reader, retain at most 32 active responses, 20,000 active event digests in total, 1,000 items per response and 1,000 completed observations. Unsupported/oversized rows break sequence validation rather than supplying guessed boundaries.
+- Transport restart: quiescent row cursors and file/row HMACs only, at most 256 saved cursors within history retention. No raw bodies or in-flight parser state are saved. Changed row anchors, physical files or parser revisions trigger bounded replay. EOF with active responses preserves incomplete observations; sample persistence must succeed before advancing saved cursors.
 - Storage: at most 30 days / 10,000 samples; bounded withdrawal records prevent proven old duplicates from returning.
 - State freshness: 120 seconds. Latest-output staleness: 60 seconds. Tray averages remain available for their selected history window.
 

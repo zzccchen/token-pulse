@@ -12,7 +12,7 @@ from pathlib import Path
 from token_pulse.domain import Context, Sample
 from token_pulse.logs import LogEvidence
 from token_pulse.rollout import Rollout
-from token_pulse.tailer import JsonlTail
+from token_pulse.tailer import JsonlTail, open_tail
 
 
 @dataclass
@@ -25,7 +25,7 @@ class Source:
 
 
 # Bump when rollout interpretation changes so unchanged files are re-evaluated.
-RECOVERY_REVISION = 7
+RECOVERY_REVISION = 10
 
 
 def fingerprint(source: Source, evidence: LogEvidence) -> str:
@@ -47,6 +47,11 @@ def fingerprint(source: Source, evidence: LogEvidence) -> str:
         sorted(
             (turn, asdict(tag))
             for (task, turn), tag in evidence.config_tags.items()
+            if task == source.task
+        ),
+        sorted(
+            (turn, times)
+            for (task, turn), times in evidence.interruptions.items()
             if task == source.task
         ),
     )
@@ -125,18 +130,24 @@ class Backfill:
                     continue
                 self.active = (
                     source,
-                    JsonlTail(source.path, backfill=None),
+                    open_tail(source.path, backfill=None),
                     Rollout(source.task, context=source.context),
                 )
             source, tail, rollout = self.active
             tail.budget = min(2 * 1024 * 1024, remaining)
             before = tail.offset
             batch = tail.read()
-            remaining -= max(1, tail.offset if batch.reset else tail.offset - before)
-            if not batch.error and batch.size < source.version[0]:
-                source.version = batch.size, source.version[1]
+            remaining -= max(
+                1, batch.bytes_read, tail.offset if batch.reset else tail.offset - before
+            )
             if batch.reset:
-                source.version = batch.size, source.version[1]
+                try:
+                    stat = source.path.stat()
+                    source.version = stat.st_size, stat.st_mtime_ns
+                    source.identity = stat.st_dev, stat.st_ino
+                    self.active_stamp = fingerprint(source, evidence)
+                except OSError:
+                    batch.error = "source_unavailable"
                 rollout = Rollout(source.task, context=source.context)
                 self.active = source, tail, rollout
             if batch.error:
@@ -165,14 +176,22 @@ class Backfill:
             if len(batch.records) in gaps:
                 rollout.damage("record_gap")
             drain()
-            if tail.offset >= source.version[0]:
+            if batch.eof:
                 # An appended partial line is picked up by live tailing or rediscovery.
                 # Re-reading a changed file is safe: history uses stable sample keys.
-                self.done[source.task] = source.path, source.version
-                self.done_stamps[source.task] = self.active_stamp
-                if self.checkpoint_key and not tail.pending and not tail.dropping:
-                    key = self.checkpoint_key(source.task, source.path)
-                    self.completed[key] = self.active_stamp, now
+                try:
+                    stat = source.path.stat()
+                    unchanged = (stat.st_size, stat.st_mtime_ns) == source.version
+                    unchanged &= (stat.st_dev, stat.st_ino) == source.identity
+                except OSError:
+                    unchanged = False
+                    issues.add("source_unavailable")
+                if unchanged and not tail.pending and not tail.dropping:
+                    self.done[source.task] = source.path, source.version
+                    self.done_stamps[source.task] = self.active_stamp
+                    if self.checkpoint_key:
+                        key = self.checkpoint_key(source.task, source.path)
+                        self.completed[key] = self.active_stamp, now
                 self.queued.discard(source.task)
                 self.active = None
         return samples, issues

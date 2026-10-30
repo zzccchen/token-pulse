@@ -59,6 +59,38 @@ def test_configuration_evidence_translates_and_retains_raw_values():
         i18n.set_language("zh_CN")
 
 
+def test_transport_records_show_timing_confirmation_and_specific_exclusions_in_both_languages():
+    app = QApplication.instance() or QApplication([])
+    original = demo_snapshot().samples[0]
+    wire = replace(
+        original,
+        source="codex-transport-log-v1",
+        timing_source="transport-log",
+        context=replace(original.context, actual_tier="priority"),
+    )
+    conflict = replace(wire, response_id="conflict", issue="cross_source_conflict")
+    window = HistoryWindow()
+    try:
+        for language, reason, boundary in [
+            ("zh_CN", "跨来源用量冲突", "传输日志边界"),
+            ("en", "Conflicting usage across sources", "Transport log boundaries"),
+        ]:
+            i18n.set_language(language)
+            window.retranslate_ui()
+            window.apply([wire, conflict])
+            assert window.table.rowCount() == 2
+            valid = next(i for i, sample in enumerate(window.filtered) if sample.exclusion is None)
+            excluded = 1 - valid
+            assert window.table.item(valid, 12).text() == "priority"
+            assert boundary in window.table.item(valid, 14).toolTip()
+            assert window.table.item(excluded, 14).text() == reason
+            assert window.table.item(excluded, 4).text() == "—"
+            app.processEvents()
+    finally:
+        window.close()
+        i18n.set_language("zh_CN")
+
+
 def test_catalog_covers_literal_messages_and_preserves_format_specs():
     root = Path(__file__).parents[1] / "src/token_pulse"
     messages = set()

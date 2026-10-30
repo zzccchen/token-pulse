@@ -6,6 +6,7 @@ TokenPulse's own code is licensed under [MIT](LICENSE). That does not change the
 
 - **Qt for Python / PySide6 Essentials / Shiboken6.** Qt for Python offers community LGPLv3/GPLv3 and commercial licensing options. TokenPulse uses Qt Core, Gui, and Widgets via the Python packages. Consult the [Qt for Python licensing documentation](https://doc.qt.io/qtforpython-6/licenses.html) and the notices shipped with the exact dependency versions.
 - **Python.** Local standalone builds include a Python runtime and its applicable license files; see the [Python license](https://docs.python.org/3/license.html).
+- **pyzstd / Zstandard.** Compressed session decoding uses pyzstd. The locked 0.18.0 distribution includes BSD-3-Clause notices for both the bindings and the incorporated Zstandard library. Windows packaging copies its `LICENSE` and `LICENSE_zstd` files and records the dependency version. See the [upstream project](https://github.com/rogdham/pyzstd). Older Python source installations also resolve the `typing-extensions` dependency and its upstream license through the package manager.
 - **PyInstaller.** The local EXE builder uses PyInstaller, which has an exception for distributing applications built with it. See its [license and exception](https://pyinstaller.org/en/stable/license.html). This does not replace the licenses of bundled dependencies.
 - Development tools retain their own licenses. They are not imported by the running application.
 

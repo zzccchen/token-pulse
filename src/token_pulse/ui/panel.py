@@ -51,6 +51,7 @@ ISSUES = {
     "invalid_record": "事件结构或时间无法解析",
     "out_of_order": "事件时间顺序冲突",
     "request_error": "响应期间发生明确错误",
+    "interrupted_response": "输出跨度内有断流重试，无法确认连续生成计时",
     "missing_item_id": "输出缺少关联标识",
     "conflicting_item": "同一输出有冲突的结束时间",
     "turn_mismatch": "用量与输出轮次不匹配",
@@ -58,6 +59,30 @@ ISSUES = {
     "usage_counter_reset": "用量计数在输出期间重置",
     "usage_scope_mismatch": "累计增量与本次用量不一致",
     "missing_usage_baseline": "缺少前一次用量快照",
+    "transport_missing_start": "缺少传输序列起点",
+    "transport_missing_process": "缺少传输进程标识",
+    "transport_sequence_gap": "传输事件序列不完整",
+    "transport_record_gap": "传输事件序列不完整",
+    "transport_incomplete_stream": "传输事件序列不完整",
+    "transport_incomplete_items": "输出边界不完整",
+    "transport_incomplete_content": "输出边界不完整",
+    "transport_invalid_sequence": "事件结构或时间无法解析",
+    "transport_invalid_content_index": "事件结构或时间无法解析",
+    "transport_invalid_delta": "事件结构或时间无法解析",
+    "transport_invalid_item_status": "事件结构或时间无法解析",
+    "transport_unknown_event": "传输事件格式尚不支持",
+    "transport_unsupported_item": "传输事件格式尚不支持",
+    "transport_unsupported_content": "传输事件格式尚不支持",
+    "transport_unknown_item": "无法唯一匹配输出",
+    "transport_unknown_content": "无法唯一匹配输出",
+    "transport_ambiguous_route": "无法唯一匹配输出",
+    "ambiguous_response_identity": "无法唯一匹配输出",
+    "transport_timestamp_order": "事件时间顺序冲突",
+    "transport_conflict": "传输记录存在矛盾",
+    "cross_source_conflict": "跨来源用量冲突",
+    "transport_missing_usage": "token 计数无效",
+    "transport_failed": "响应期间发生明确错误",
+    "transport_capacity": "传输记录超过解析上限",
 }
 DIAGNOSTICS = {
     "no_sessions": "还没有找到任务。运行一次本机 Codex，或在设置中选择数据目录。",
@@ -502,6 +527,7 @@ class Panel(QMainWindow):
             if sample.exclusion is None
         )
         timing_labels = {
+            "transport-log": tr("传输日志边界"),
             "stream-log": tr("诊断日志起点"),
             "item-event": tr("输出事件起点"),
             "legacy": tr("旧版记录"),
@@ -531,7 +557,16 @@ class Panel(QMainWindow):
             (tr("当前全局配置"), " / ".join(sorted(configs)) if configs else tr("无当前快照")),
             (
                 tr("数据来源"),
-                " / ".join(sorted({s.source for s in self.view.samples})) or tr("未记录"),
+                " / ".join(
+                    sorted(
+                        {
+                            source
+                            for s in self.view.samples
+                            for source in (s.evidence_sources or (s.source,))
+                        }
+                    )
+                )
+                or tr("未记录"),
             ),
             (tr("测速边界"), timing_text),
             (
