@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from token_pulse.logs import LogEvidence, Start
@@ -5,7 +7,13 @@ from token_pulse.rollout import PARSER_REVISION, REJECTIONS, Rollout, duration
 
 
 def event(parser, kind, payload, second):
-    parser.feed({"type": kind, "timestamp": f"2026-01-01T00:00:{second:02d}Z", "payload": payload})
+    parser.feed(
+        {
+            "type": kind,
+            "timestamp": datetime.fromtimestamp(1767225600 + second, UTC).isoformat(),
+            "payload": payload,
+        }
+    )
 
 
 def ready():
@@ -318,8 +326,8 @@ def completed_item(
             "type": "item_completed",
             "thread_id": thread,
             "turn_id": turn,
-            "started_at_ms": (1767225600 + start) * 1000,
-            "completed_at_ms": (1767225600 + end) * 1000,
+            "started_at_ms": 1767225600000 + round(start * 1000),
+            "completed_at_ms": 1767225600000 + round(end * 1000),
             "item": {"type": kind, "id": item, "content": "PRIVATE TEXT"},
         },
         end,
@@ -440,7 +448,7 @@ def test_inherited_model_and_error_do_not_become_current_child_state():
     assert parser.notice is None
 
 
-def test_lifecycle_start_recovers_a_response_when_diagnostic_logs_are_gone():
+def test_lifecycle_without_stream_origin_retains_usage_when_diagnostic_logs_are_gone():
     parser = ready()
     completed_item(parser)
     output(parser)
@@ -450,7 +458,8 @@ def test_lifecycle_start_recovers_a_response_when_diagnostic_logs_are_gone():
     event(parser, "response_item", {"type": "custom_tool_call_output", "call_id": "call"}, 40)
     legacy_count(parser, 100, 100, 41)
     sample = parser.samples(LogEvidence())[0]
-    assert sample.tps == 10
+    assert sample.tps is None and sample.output_tokens == 100
+    assert sample.exclusion == "unverified_lifecycle_start"
     assert sample.timing_source == "item-event"
     assert "PRIVATE TEXT" not in repr(parser.__dict__)
 
@@ -476,7 +485,7 @@ def test_lifecycle_end_avoids_a_delayed_rollout_write_timestamp():
     completed_item(parser)
     output(parser, second=15)
     usage(parser, second=16)
-    sample = parser.samples(LogEvidence())[0]
+    sample = parser.samples(evidence())[0]
     assert sample.seconds == 2
     assert sample.ended_at == 1767225612
 

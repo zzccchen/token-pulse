@@ -60,7 +60,9 @@ def test_invalid_modes_truncation_duplicate_fields_and_second_override():
     assert submitted_tier("task", 10, body()[:-2]) is None
     assert submitted_tier("task", 10, body().replace("model: None,", "service_tier: None,")) is None
     assert submitted_tier("task", 10, body(text="x" * 17000)) is None
-    assert submitted_tier("task", 10, body(start='Some("default")'))[1].state == "ambiguous"
+    result = submitted_tier("task", 10, body(start='Some("default")'))[1]
+    assert (result.tier, result.state) == ("priority", "set")
+    assert (result.override_tier, result.override_state) == ("default", "set")
 
 
 def test_conflicts_are_not_last_writer_wins_and_storage_is_bounded():

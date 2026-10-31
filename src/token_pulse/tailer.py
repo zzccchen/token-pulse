@@ -10,6 +10,15 @@ from pathlib import Path
 from pyzstd import DParameter, EndlessZstdDecompressor, ZstdError
 
 
+class AmbiguousObject(dict):
+    """Object with duplicate JSON fields; evidence adapters must not trust it."""
+
+
+def json_object(pairs: list[tuple]) -> dict:
+    value = dict(pairs)
+    return AmbiguousObject(value) if len(value) != len(pairs) else value
+
+
 @dataclass
 class Batch:
     records: list[dict] = field(default_factory=list)
@@ -98,7 +107,7 @@ class JsonlTail:
             if complete:
                 if not self.dropping and self.pending.strip():
                     try:
-                        record = json.loads(self.pending)
+                        record = json.loads(self.pending, object_pairs_hook=json_object)
                         if isinstance(record, dict):
                             batch.records.append(record)
                         else:

@@ -1,6 +1,10 @@
 """English translations keyed by Chinese source templates."""
 
 MESSAGES = {
+    "仅有生命周期时间，缺少独立的输出流起点": (
+        "Lifecycle timing only; independent output-stream start missing"
+    ),
+    "生命周期记录（流起点未确认）": "Lifecycle record (stream origin unverified)",
     ("\n采集检查 {checked} · 当前范围 {value} 段"): (
         "\nChecked {checked} · {value} records in this range"
     ),
@@ -33,17 +37,15 @@ MESSAGES = {
     "token 口径不支持合并测速": "Token scope excluded from speed statistics",
     "token 计数无效": "Invalid token count",
     "{active} 个活动": "Active: {active}",
-    ("{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} 总输出 tokens · {seconds:.2f} 秒"): (
-        "{at} · {value}\n{tps:.1f} tokens/s\n"
-        "{output_tokens:,} total output tokens · "
-        "{seconds:.2f} s"
+    ("{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} 总输出 tokens · {seconds} 秒"): (
+        "{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} total output tokens · {seconds} s"
     ),
     "{count} 个{value}": "{value}: {count}",
     "{count} 段可测速 · {observed_conversations} 个对话": (
         "Measured: {count} · Conversations: {observed_conversations}"
     ),
     "{excluded} 段未计入": "Excluded: {excluded}",
-    "{output_tokens:,} tokens · {seconds:.2f} 秒": "{output_tokens:,} tokens · {seconds:.2f} s",
+    "{output_tokens:,} tokens · {seconds} 秒": "{output_tokens:,} tokens · {seconds} s",
     "{stamp} — {end} · 按完成时间归档 · 对话标识已匿名化": (
         "{stamp} — {end} · By completion time · Anonymous conversation IDs"
     ),
@@ -362,4 +364,34 @@ MESSAGES = {
     "回合配置标签": "Turn configuration tag",
     "配置标签冲突，模式未知": "Conflicting configuration tags; mode unknown",
     "旧版来源未核实，未采用": "Legacy provenance unverified; not used",
+    "线程配置快照": "Thread configuration snapshot",
+    "线程配置快照，回合已关联": "thread configuration snapshot, turn matched",
+    "回合覆盖设置": "Turn override setting",
+    "明确无回合覆盖": "Explicitly no turn override",
+    "回合覆盖未知": "Turn override unknown",
+    "回合覆盖证据冲突": "Conflicting turn override evidence",
+    "快照未提供层级": "Tier absent from snapshot",
+    "快照层级格式不支持": "Unsupported snapshot tier format",
+    "同一时刻的线程配置冲突": "Conflicting thread configurations at the same time",
+    "已关联回合，提交明确无层级覆盖": "Turn matched; submission explicitly has no tier override",
+    "回合覆盖未知，保留线程配置，不用于模式标记": (
+        "Turn override unknown; thread configuration retained without changing mode"
+    ),
+    "存在独立回合覆盖，线程配置不代表回合层级": (
+        "Separate turn override present; thread configuration does not establish the turn tier"
+    ),
+    "提交改变了线程设置，不使用旧快照标记模式": (
+        "Submission changed thread settings; the old snapshot does not label the mode"
+    ),
+    "快照晚于回合开始，仅保留线程配置": "Snapshot follows turn start; thread configuration only",
+    "快照晚于输出起点，仅保留线程配置": "Snapshot follows output start; thread configuration only",
+    "缺少可匹配的回合开始，保留线程配置": "No matching turn start; thread configuration retained",
+    "回合开始证据冲突": "Conflicting turn-start evidence",
+    (
+        "{tier}\n快照观测时间：{stamp}\n来源：{source}\n{binding}\n"
+        "线程配置不等于请求值或服务端实际层级。"
+    ): (
+        "{tier}\nSnapshot observed: {stamp}\nSource: {source}\n{binding}\n"
+        "Thread configuration does not establish request values or server execution tier."
+    ),
 }

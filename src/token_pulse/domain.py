@@ -21,6 +21,118 @@ class Context:
     submitted_tier_state: str | None = None
     config_tag_tier: str | None = None
     config_tag_state: str | None = None
+    thread_config_tier: str | None = None
+    thread_config_state: str | None = None
+    thread_config_at: float | None = None
+    thread_config_source: str | None = None
+    thread_config_turn_at: float | None = None
+    thread_config_turn_observed_at: float | None = None
+    thread_config_relation: str | None = None
+    thread_config_binding: str | None = None
+    turn_override_tier: str | None = None
+    turn_override_state: str | None = None
+    turn_override_at: float | None = None
+
+
+def bind_thread_config(context: Context, *, output_start: float | None = None) -> Context:
+    """Classify association strength without manufacturing request/actual values."""
+    if context.thread_config_state is None:
+        return context
+    if (
+        output_start is not None
+        and context.thread_config_at is not None
+        and context.thread_config_at > output_start
+    ):
+        context = replace(context, thread_config_relation="after_output_start")
+    binding = context.thread_config_relation or "missing_turn"
+    if context.thread_config_state != "set":
+        binding = context.thread_config_state
+    elif context.turn_override_state == "set":
+        binding = "overridden"
+    elif context.turn_override_state == "ambiguous":
+        binding = "ambiguous_override"
+    elif binding == "before_turn":
+        if (
+            context.turn_override_state != "none"
+            or context.turn_override_at is None
+            or context.thread_config_turn_observed_at is None
+            or context.turn_override_at > context.thread_config_turn_observed_at
+        ):
+            binding = "override_unknown"
+        elif context.submitted_tier_state == "unspecified" or (
+            context.submitted_tier_state == "set"
+            and context.submitted_tier == context.thread_config_tier
+        ):
+            binding = "matched"
+        else:
+            binding = "submission_changed"
+    return replace(context, thread_config_binding=binding)
+
+
+THREAD_CONFIG_FIELDS = tuple(
+    name for name in Context.__dataclass_fields__ if name.startswith("thread_config_")
+)
+
+
+def merge_thread_config(previous: Context, incoming: Context) -> dict:
+    """Retain saved observations across source loss; conflict is not precedence."""
+    chosen = incoming if incoming.thread_config_state is not None else previous
+    if previous.thread_config_state is not None and incoming.thread_config_state is not None:
+        if previous.thread_config_at == incoming.thread_config_at and (
+            previous.thread_config_tier,
+            previous.thread_config_state,
+        ) != (incoming.thread_config_tier, incoming.thread_config_state):
+            chosen = replace(incoming, thread_config_tier=None, thread_config_state="ambiguous")
+        elif (
+            previous.thread_config_at == incoming.thread_config_at
+            and previous.thread_config_relation == "ambiguous_turn"
+        ):
+            chosen = previous
+        elif (
+            previous.thread_config_relation == incoming.thread_config_relation == "before_turn"
+            and previous.thread_config_at is not None
+            and incoming.thread_config_at is not None
+            and previous.thread_config_at > incoming.thread_config_at
+        ):
+            chosen = previous  # A partial reread cannot roll back a later pre-turn snapshot.
+        elif (
+            previous.thread_config_relation == "before_turn"
+            and incoming.thread_config_relation in {"missing_turn", "during_turn"}
+            and incoming.thread_config_state not in {"ambiguous", "invalid"}
+        ):
+            # A partial reread may only see a later checkpoint. It does not undo
+            # a previously captured thread-owned pre-turn observation.
+            chosen = previous
+    return {name: getattr(chosen, name) for name in THREAD_CONFIG_FIELDS}
+
+
+def merge_turn_override(previous: Context, incoming: Context) -> dict:
+    known = [c for c in (previous, incoming) if c.turn_override_state is not None]
+    if not known:
+        return {}
+    values = {(c.turn_override_tier, c.turn_override_state) for c in known}
+    tier, state = next(iter(values)) if len(values) == 1 else (None, "ambiguous")
+    times = [c.turn_override_at for c in known if c.turn_override_at is not None]
+    return {
+        "turn_override_tier": tier,
+        "turn_override_state": state,
+        "turn_override_at": min(times) if times else None,
+    }
+
+
+def merge_submitted_tier(previous: Context, incoming: Context) -> dict:
+    known = [
+        c
+        for c in (previous, incoming)
+        if c.submitted_tier_state in {"set", "cleared", "unspecified", "ambiguous"}
+    ]
+    if known:
+        values = {(c.submitted_tier, c.submitted_tier_state) for c in known}
+        tier, state = next(iter(values)) if len(values) == 1 else (None, "ambiguous")
+    else:
+        chosen = incoming if incoming.submitted_tier_state is not None else previous
+        tier, state = chosen.submitted_tier, chosen.submitted_tier_state
+    return {"submitted_tier": tier, "submitted_tier_state": state}
 
 
 @dataclass(frozen=True)
@@ -88,10 +200,28 @@ class Sample:
         return now - self.ended_at > max_age or now < self.ended_at
 
 
+def correct_legacy_lifecycle(sample: Sample) -> Sample:
+    """Withdraw the proven v1-v7 lifecycle-origin assumption, even without logs."""
+    if (
+        sample.parser_revision < 8
+        and sample.source == "codex-local-log-v1"
+        and sample.timing_source == "item-event"
+        and sample.exclusion is None
+    ):
+        return replace(
+            sample,
+            issue="unverified_lifecycle_start",
+            parser_revision=8,
+        )
+    return sample
+
+
 def reconcile(previous: Sample, incoming: Sample) -> Sample:
     """Preserve complete measurements while independently refreshing tier evidence."""
     if previous.key != incoming.key:
         raise ValueError("Cannot reconcile different output samples")
+    previous = correct_legacy_lifecycle(previous)
+    incoming = correct_legacy_lifecycle(incoming)
     sources = tuple(
         sorted(
             set(
@@ -114,6 +244,7 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     }
     reliable_usage_issues = {
         None,
+        "unverified_lifecycle_start",
         "missing_start",
         "missing_stream_start",
         "missing_output_items",
@@ -139,6 +270,7 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         incoming.parser_revision > previous.parser_revision and incoming.exclusion is None
     )
     withdrawals = {
+        "unverified_lifecycle_start",
         "unconfirmed_tool_start",
         "unconfirmed_initial_span",
         "unsupported_output_item",
@@ -150,7 +282,11 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         "interrupted_response",
     }
     revised_boundary = (
-        incoming.parser_revision > previous.parser_revision and incoming.issue in withdrawals
+        incoming.parser_revision > previous.parser_revision
+        and incoming.issue in withdrawals
+        and (
+            incoming.issue != "unverified_lifecycle_start" or previous.timing_source == "item-event"
+        )
     )
     extended_boundary = (
         incoming.parser_revision == previous.parser_revision
@@ -164,7 +300,19 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         and incoming.timing_source == "stream-log"
         and previous.timing_source == "item-event"
     )
-    if previous.issue in withdrawals and previous.parser_revision > incoming.parser_revision:
+    independent_lifecycle_repair = (
+        previous.issue == "unverified_lifecycle_start"
+        and incoming.exclusion is None
+        and incoming.parser_revision >= 7
+        and incoming.timing_source in {"stream-log", "transport-log"}
+        and incoming.output_tokens == previous.output_tokens
+        and incoming.token_scope == previous.token_scope
+    )
+    if (
+        previous.issue in withdrawals
+        and previous.parser_revision > incoming.parser_revision
+        and not independent_lifecycle_repair
+    ):
         base = previous
     else:
         base = (
@@ -188,9 +336,6 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
             continue  # A complete exact response sequence independently proves its interval.
         if observation.issue in conflicts and observation.parser_revision >= base.parser_revision:
             base = replace(base, issue=observation.issue)
-    evidence = (
-        incoming.context if incoming.context.submitted_tier_state is not None else previous.context
-    )
     config_tag = (
         incoming.context if incoming.context.config_tag_state is not None else previous.context
     )
@@ -200,26 +345,30 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         evidence_sources=sources
         if transport or previous.evidence_sources or incoming.evidence_sources
         else (),
-        context=replace(
-            base.context,
-            model=base.context.model or previous.context.model or incoming.context.model,
-            effort=base.context.effort or previous.context.effort or incoming.context.effort,
-            provider=base.context.provider
-            or previous.context.provider
-            or incoming.context.provider,
-            auth_mode=base.context.auth_mode
-            or previous.context.auth_mode
-            or incoming.context.auth_mode,
-            requested_tier=base.context.requested_tier
-            or previous.context.requested_tier
-            or incoming.context.requested_tier,
-            actual_tier=base.context.actual_tier
-            or previous.context.actual_tier
-            or incoming.context.actual_tier,
-            submitted_tier=evidence.submitted_tier,
-            submitted_tier_state=evidence.submitted_tier_state,
-            config_tag_tier=config_tag.config_tag_tier,
-            config_tag_state=config_tag.config_tag_state,
+        context=bind_thread_config(
+            replace(
+                base.context,
+                model=base.context.model or previous.context.model or incoming.context.model,
+                effort=base.context.effort or previous.context.effort or incoming.context.effort,
+                provider=base.context.provider
+                or previous.context.provider
+                or incoming.context.provider,
+                auth_mode=base.context.auth_mode
+                or previous.context.auth_mode
+                or incoming.context.auth_mode,
+                requested_tier=base.context.requested_tier
+                or previous.context.requested_tier
+                or incoming.context.requested_tier,
+                actual_tier=base.context.actual_tier
+                or previous.context.actual_tier
+                or incoming.context.actual_tier,
+                **merge_submitted_tier(previous.context, incoming.context),
+                config_tag_tier=config_tag.config_tag_tier,
+                config_tag_state=config_tag.config_tag_state,
+                **merge_turn_override(previous.context, incoming.context),
+                **merge_thread_config(previous.context, incoming.context),
+            ),
+            output_start=base.started_at,
         ),
     )
 

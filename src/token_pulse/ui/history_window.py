@@ -23,7 +23,15 @@ from token_pulse.history import export_csv
 from token_pulse.i18n import tr
 from token_pulse.stats import grouped
 from token_pulse.ui.glass import Backdrop, GlassBar, MaterialComboBox
-from token_pulse.ui.panel import ISSUES, configuration_tag_label, submission_label, text_label
+from token_pulse.ui.panel import (
+    ISSUES,
+    configuration_tag_label,
+    submission_label,
+    text_label,
+    thread_configuration_label,
+    thread_configuration_tooltip,
+    turn_override_label,
+)
 from token_pulse.ui.timeline_chart import mode_info
 
 
@@ -69,7 +77,7 @@ class HistoryWindow(QMainWindow):
         self.summary = text_label(tr("还没有历史样本"), "muted")
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
-        self.table = QTableWidget(0, 15)
+        self.table = QTableWidget(0, 17)
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -108,10 +116,12 @@ class HistoryWindow(QMainWindow):
                 tr("实际层级"),
                 tr("口径"),
                 tr("说明"),
+                tr("线程配置快照"),
+                tr("回合覆盖设置"),
             ]
         )
         for column, width in enumerate(
-            [115, 75, 100, 200, 60, 90, 65, 50, 130, 110, 110, 75, 75, 65, 130]
+            [115, 75, 100, 200, 60, 90, 65, 50, 130, 110, 110, 75, 75, 65, 130, 160, 180]
         ):
             header = self.table.horizontalHeaderItem(column)
             header.setToolTip(header.text())
@@ -249,6 +259,8 @@ class HistoryWindow(QMainWindow):
                 tr(ISSUES.get(sample.exclusion, "数据不足"))
                 if sample.exclusion
                 else (tr("演示样本") if sample.source == "synthetic-demo" else tr("日志估算")),
+                thread_configuration_label(ctx),
+                turn_override_label(ctx),
             ]
             for column, value in enumerate(values):
                 item = QTableWidgetItem()
@@ -256,11 +268,13 @@ class HistoryWindow(QMainWindow):
                     item.setData(Qt.ItemDataRole.UserRole, sample.key)
                 item.setData(Qt.ItemDataRole.DisplayRole, "—" if value is None else value)
                 item.setToolTip("—" if value is None else str(value))
+                if column == 15:
+                    item.setToolTip(thread_configuration_tooltip(ctx))
                 if column == 14 and sample.timing_source:
                     boundary = {
                         "transport-log": tr("传输日志边界"),
                         "stream-log": tr("诊断日志起点"),
-                        "item-event": tr("输出事件起点"),
+                        "item-event": tr("生命周期记录（流起点未确认）"),
                         "tool-item-notification": tr("仅有工具调用项通知，不是完整生成计时"),
                         "coincident-item-boundaries": tr(
                             "首项起止时间重合，日志通知未提供更早起点"

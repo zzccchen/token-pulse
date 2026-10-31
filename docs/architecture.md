@@ -23,6 +23,7 @@ All paths below are relative to `src/token_pulse/`.
 | `tailer.py` | Bounded plain/compressed JSONL reads, partial lines, frame validation, truncation and rotation |
 | `collector.py` | Source discovery, path containment, live polling and task state |
 | `logs.py`, `submissions.py` | Read-only diagnostics and bounded outer submission parsing |
+| `thread_settings.py` | Bounded thread-owned snapshot history, turn-start chronology and association validation |
 | `transport.py`, `transport_logs.py` | Responses sequence validation, bounded SQLite transport recovery and safe cursors |
 | `rollout.py` | Event normalization, usage/timing association, fork and replay detection |
 | `backfill.py` | Budgeted seven-day historical recovery independent of the live task limit |
@@ -37,6 +38,8 @@ All paths below are relative to `src/token_pulse/`.
 The UI consumes snapshots and never parses raw logs or reads source databases. A background worker owns collection and history access. Live and stored observations share pseudonymized identities before merging.
 
 Source adapters interpret version-dependent internal formats. The normalized model retains unknown evidence rather than guessing it. Exact statistics and exclusion rules are defined in [measurement](measurement.md); source relationships and regression rationale are in [source evidence](source-audit.md).
+
+Thread snapshots enter the same rollout parser in live collection and historical recovery. They retain only tier/state, observation and turn-boundary times, source and association status. An exactly scoped submission independently supplies the turn override. A validated configuration fallback changes display evidence, never sample identity, tokens, timing, request values or server-confirmed tiers. Source loss preserves saved evidence; contradictory overrides remain conflicts, and transport timing replacement revalidates the snapshot boundary.
 
 Discovery inspects required SQLite tables/columns in the source root and its historical `sqlite/` layout. It selects one compatible index and general diagnostic database. The transport reader separately checks up to eight compatible diagnostic stores; overlapping outputs merge by exact response identities or complete item aliases. Each source validates its own stream without splicing events across stores. Indexed `.jsonl` paths can resolve to compressed siblings; both spellings share a logical recovery key, while changed container metadata invalidates reuse. Decoding is sequential and in memory. Compressed byte positions are never used as decoded JSONL offsets, and thread-history offsets are not currently consumed.
 

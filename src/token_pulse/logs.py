@@ -7,7 +7,7 @@ import sqlite3
 from bisect import bisect_left, bisect_right, insort
 from collections import OrderedDict
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from token_pulse.submissions import (
@@ -162,12 +162,26 @@ class LogEvidence:
                 key = task, turn_id
                 previous = settings.get(key)
                 if previous is not None:
+                    original = observation
                     if (previous.tier, previous.state) != (observation.tier, observation.state):
-                        observation = type(observation)(min(previous.at, at), None, "ambiguous")
-                    else:
-                        observation = type(observation)(
-                            min(previous.at, at), previous.tier, previous.state
+                        observation = replace(
+                            observation, at=min(previous.at, at), tier=None, state="ambiguous"
                         )
+                    else:
+                        observation = replace(observation, at=min(previous.at, at))
+                    if isinstance(observation, SubmittedTier):
+                        known = [v for v in (previous, original) if v.override_state is not None]
+                        if known:
+                            values = {(v.override_tier, v.override_state) for v in known}
+                            tier, state = (
+                                next(iter(values)) if len(values) == 1 else (None, "ambiguous")
+                            )
+                            observation = replace(
+                                observation,
+                                override_tier=tier,
+                                override_state=state,
+                                override_at=min(v.override_at for v in known),
+                            )
                 settings[key] = observation
                 settings.move_to_end(key)
                 while len(settings) > self.capacity:

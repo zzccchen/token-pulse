@@ -4,7 +4,7 @@ import time
 from dataclasses import replace
 
 from token_pulse.collector import Snapshot
-from token_pulse.domain import Context, Sample, Task
+from token_pulse.domain import Context, Sample, Task, bind_thread_config
 
 
 def demo_snapshot() -> Snapshot:
@@ -26,12 +26,23 @@ def demo_snapshot() -> Snapshot:
             now - (19 - i) * 85 - 6,
             170,
             now - (19 - i) * 85 - 6 - 170 / rate,
-            replace(
-                context,
-                submitted_tier=("priority", "default", None, None, "priority")[i % 5],
-                submitted_tier_state=None if i % 5 in {2, 3} else "set",
-                config_tag_tier="ultrafast" if i % 5 == 3 else None,
-                config_tag_state="set" if i % 5 == 3 else None,
+            bind_thread_config(
+                replace(
+                    context,
+                    submitted_tier=("priority", "default", None, None, None)[i % 5],
+                    submitted_tier_state=("set", "set", None, None, "unspecified")[i % 5],
+                    config_tag_tier="ultrafast" if i % 5 == 3 else None,
+                    config_tag_state="set" if i % 5 == 3 else None,
+                    thread_config_tier="priority" if i % 5 in {2, 4} else None,
+                    thread_config_state="set" if i % 5 in {2, 4} else None,
+                    thread_config_at=now - 3600 if i % 5 in {2, 4} else None,
+                    thread_config_source="synthetic-demo" if i % 5 in {2, 4} else None,
+                    thread_config_turn_at=now - 3500 if i % 5 in {2, 4} else None,
+                    thread_config_turn_observed_at=now - 3500 if i % 5 in {2, 4} else None,
+                    thread_config_relation="before_turn" if i % 5 in {2, 4} else None,
+                    turn_override_state="none" if i % 5 == 4 else None,
+                    turn_override_at=now - 3550 if i % 5 == 4 else None,
+                )
             ),
             source="synthetic-demo",
         )

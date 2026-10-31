@@ -118,12 +118,12 @@ def test_stale_snapshot_is_removed_but_later_validated_same_output_can_return(tm
 def test_parser_revision_can_correct_old_rate_without_losing_it_to_missing_logs(tmp_path):
     history = History(tmp_path / "history.sqlite")
     history.append([sample()], now=110)
-    corrected = replace(sample(), started_at=98, parser_revision=2, timing_source="item-event")
+    corrected = replace(sample(), started_at=98, parser_revision=2, timing_source="stream-log")
     history.append([corrected], now=111)
     assert history.read()[0].tps == 25
     history.append([replace(corrected, started_at=None)], now=112)
     assert history.read()[0].tps == 25
-    assert history.read()[0].timing_source == "item-event"
+    assert history.read()[0].timing_source == "stream-log"
     history.close()
 
 
@@ -131,7 +131,7 @@ def test_revised_timing_preserves_previously_confirmed_request_metadata(tmp_path
     history = History(tmp_path / "history.sqlite")
     old = replace(sample(), context=Context(auth_mode="Chatgpt", requested_tier="priority"))
     history.append([old], now=110)
-    revised = replace(sample(), started_at=98, parser_revision=2, timing_source="item-event")
+    revised = replace(sample(), started_at=98, parser_revision=2, timing_source="stream-log")
     history.append([revised], now=111)
     saved = history.read()[0]
     assert saved.tps == 25

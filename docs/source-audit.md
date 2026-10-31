@@ -8,9 +8,10 @@ This is a version-scoped adapter reference, not a promise about future Codex for
 | --- | --- | --- |
 | State SQLite `threads` | Session index, paths, current settings | Current model/settings cannot fill historical turns |
 | JSONL `turn_context` | Turn model and reasoning effort | Parse the outer structure, not user text |
+| JSONL `thread_settings_applied` | Historical thread preference with explicit owner | Additional turn-start and override evidence is required for mode association |
 | `token_usage_record.usage` | Explicit per-response usage and identifiers | Turn/thread aggregates are different scopes |
 | `token_count` | Last usage and cumulative snapshots | An unchanged cumulative snapshot is not a new response |
-| `item_completed` | Item start/end millisecond timestamps | Non-tool timing may supplement logs; tool timing describes execution |
+| `item_completed` | Item start/end millisecond timestamps | Non-tool ends may supplement independent stream starts; lifecycle starts alone are not generation evidence; tool timing describes execution |
 | Thread-history SQLite | Derived turn/item projections | Not another independent source of samples |
 | Diagnostic SQLite | Output starts, submission/request/auth evidence | Retention and association limit availability |
 | Diagnostic SQLite SSE/WebSocket events | Completed-response usage, item timing and returned service tier | Only complete, identity-consistent supported sequences qualify for TPS |
@@ -23,7 +24,7 @@ Historical upstream reference: [protocol definitions](https://github.com/openai/
 - Usage can follow tool results. Preserve the matching model outputs and end timing at output completion, not usage arrival.
 - Completion events may carry original start/end times. Non-tool positive-duration boundaries can supplement a matching diagnostic start; contradictory evidence still invalidates timing.
 - Tool-first notifications already identify the tool. They cannot establish the full generation interval for total response tokens, even if argument streaming continues afterward.
-- Same-millisecond first-item starts/completions can be lifecycle placeholders. Later output cannot repair that initial boundary without earlier matching evidence.
+- First-item start/completion events can be synthesized during completion handling. Their elapsed time can be positive; duration alone cannot establish streaming provenance. Later output cannot repair the first item's missing stream origin.
 - Forks can copy ancestor history with new outer write timestamps. Detect ownership boundaries rather than counting copied output as newly generated.
 - Repeated cumulative snapshots cannot prematurely close pending output using old last-usage values.
 - Diagnostic retention is task-dependent. Old dates elsewhere in the database do not prove a particular task's starts remain available.
@@ -38,7 +39,7 @@ The parser distinguishes clear, unspecified, explicit, and conflicting states. I
 
 Newer diagnostic `feedback_tags` records can place the client service tier in the outer `tags_json.service_tier` string. This adapter requires `session_loop.thread_id` to match the database task, a recognized `turn` or `codex.turn_input` span with `turn.id`, and a matching `try_run_sampling_request` or `run_sampling_request` span with `turn_id`. Any additional thread/turn fields must agree. Quoted strings cannot supply scope fields. Parsing is bounded to 16,000 characters. Duplicate fields, invalid JSON, absent/null tiers, and nested tier-like content provide no tag. Contradictory tags for the same task and turn remain ambiguous.
 
-These tags have a separate configuration-evidence category. They are neither submitted settings, outbound request values, nor server confirmation. Unscoped `thread_settings_applied` events do not identify a turn and are not used to fill its tier. Recovery revision 6 invalidates previous checkpoints to enrich retained samples from scoped feedback without changing the measurement parser revision or timing rules. The public 0.1.1 format remains readable; 0.1.2/0.1.3 were unpublished local previews whose tag/submission classification required correction.
+These tags have a separate configuration-evidence category. They are neither submitted settings, outbound request values, nor server confirmation. A `thread_settings_applied` event alone does not identify a turn; its separate adapter requires the additional checks below. Recovery revision 6 invalidated previous checkpoints to enrich retained samples from scoped feedback without changing the measurement parser revision or timing rules. The public 0.1.1 format remains readable; 0.1.2/0.1.3 were unpublished local previews whose tag/submission classification required correction.
 
 Recovery revision 7 also handles a terminal `cwd` on recognized sampling spans when Path Display formatting leaves an absolute path containing spaces unquoted. The directory contributes no identity evidence and is not retained. Field-like content, embedded quotes/braces/newlines, and nonterminal ambiguous paths are rejected; every observed task/turn field still has to agree. This does not relax parsing of unrelated structured diagnostic values.
 
@@ -48,6 +49,16 @@ A display marker prefers request evidence, otherwise supported submitted setting
 
 ## Parser corrections
 
+### Historical thread snapshot semantics
+
+Source review uses the pinned upstream [event definitions](https://github.com/openai/codex/blob/13ab0b254e7b9ed0ab473d38d978fa100bf417ae/codex-rs/protocol/src/protocol.rs) and [turn-input options](https://github.com/openai/codex/blob/13ab0b254e7b9ed0ab473d38d978fa100bf417ae/codex-rs/protocol/src/turn_input.rs). `ThreadSettingsAppliedEvent.thread_id` identifies logical ownership independently of the physical file: copied snapshots retain their original owner, and older histories may omit it. `TurnStartedEvent.started_at` is optional integer Unix seconds. `TurnStartOptions.service_tier` is a per-turn override rather than a persistent preference mutation. Steered input can apply thread settings to subsequent turns while the active turn retains its own options.
+
+The [goal runtime](https://github.com/openai/codex/blob/13ab0b254e7b9ed0ab473d38d978fa100bf417ae/codex-rs/ext/goal/src/runtime.rs) can start continuation turns with start options. Goal attribution therefore cannot prove absence of a tier override. These source references explain supported semantics; they do not identify the commit of an installed binary or certify every historical format.
+
+Recovery revision 11 adds separate `thread_config_*` and `turn_override_*` evidence without copying values into request or actual-tier fields. The [association contract](measurement.md#historical-thread-configuration) requires ownership, conservative chronology and exactly scoped override evidence. Unsupported/absent owners, copied prefixes, duplicate JSON metadata fields, gaps, unknown overrides and conflicting starts cannot establish the fallback. `tests/test_thread_settings.py` covers synthetic plain/compressed recovery, source loss, restart, forks, goals, conflicts and transport timing replacement; `tests/test_i18n.py` covers the independent display columns.
+
+### Measurement parser revisions
+
 | Revision | Correction preserved in recovery |
 | --- | --- |
 | 2 | Complete response measurements can replace legacy split ranges; proven fork/snapshot duplicates can be withdrawn |
@@ -56,6 +67,7 @@ A display marker prefers request evidence, otherwise supported submitted setting
 | 5 | Unknown output scopes and unvalidated legacy counters cannot produce TPS; retain explicit usage without items; replace adjacent, matching legacy usage without duplicating history |
 | 6 | Validate transport sequences and exact cross-source aliases; prefer complete transport timing and exclude conflicting usage or ambiguous response ownership |
 | 7 | Reject session intervals that cross explicit scoped sampling retries; correct saved measurements without estimating wait time; retain the original unsupported server-tool exclusion |
+| 8 | Require independent first-item stream-origin evidence; withdraw saved lifecycle-only rates without source files, preserve independent saved timing and support later revalidation |
 
 New corrections must update parser/recovery versions as appropriate. Mere log absence cannot erase an existing valid measurement. Old parser writes must not restore proven invalid timing; repeated same-version withdrawals cannot remove already revalidated samples.
 
@@ -63,14 +75,14 @@ Regression fixtures cover delayed usage, duplicate snapshots, resets/conflicts, 
 
 ## Capability-based historical formats
 
-Recovery revision 10 re-evaluates retained sources for parser revision 7 and scoped retry evidence, following the transport adapter in revision 9 and historical adapters in revision 8. Runtime decisions use actual fields and container formats, not `cli_version`, model names, machine-specific paths, or observed speed. Session creation labels are not reliable writer-version boundaries: migration and later appends can change a file's format.
+Recovery revision 12 re-evaluates retained sources for parser revision 8 and the lifecycle-origin correction, following thread snapshots in revision 11, scoped retries in revision 10, the transport adapter in revision 9 and historical adapters in revision 8. Runtime decisions use actual fields and container formats, not `cli_version`, model names, machine-specific paths, or observed speed. Session creation labels are not reliable writer-version boundaries: migration and later appends can change a file's format.
 
 | Observed capability | Adapter behavior |
 | --- | --- |
 | Required SQLite index/log columns in the root or historical `sqlite/` directory | Select a compatible database; newer incompatible names do not hide usable older schemas |
 | Plain JSONL or a `.jsonl.zst` sibling | Decode bounded chunks with the same event parser and stable sample identities |
 | Legacy cumulative usage with complete matching counters | Validate the increment before measuring; missing IDs/timing remain exclusions |
-| Explicit per-response usage and non-tool lifecycle timestamps | Preserve response identity and use only matching positive timing boundaries |
+| Explicit per-response usage and non-tool lifecycle timestamps | Preserve response identity and usage; require an independent stream origin before measuring; matching lifecycle ends can supplement it |
 | Diagnostic `item_type`/`item_id` fields or outer Rust Debug `Message`/`Reasoning`/tool objects | Extract bounded outer item identity and consistent task/turn scope; skip nested content |
 | `subagent_history_start_ordinal` | Withdraw copied-prefix output; missing ordinals cannot establish ownership |
 | `history_base` reference | Do not follow the parent or count its output as the child's |
@@ -94,3 +106,9 @@ The adapter recognizes bounded outer warnings from `codex_core::responses_retry`
 Session output items can survive a failed attempt without a closing usage record, then be joined to a later successful response in the same turn. A start/end pair spanning an explicit retry therefore cannot measure continuous output. Retry evidence participates in recovery invalidation and exact pseudonymized history correction. Tokens remain available; retry duration is never guessed or subtracted.
 
 Short positive spans have a different limitation: diagnostic item notifications and lifecycle timestamps can originate from the same received event batch. They do not independently certify server generation speed. Absent complete matching transport records, the adapter cannot identify a buffering delay or reconstruct a more accurate rate. Large TPS values are not removed solely for their magnitude.
+
+### Positive lifecycle intervals without a stream origin
+
+The pinned upstream [completed-item handler](https://github.com/openai/codex/blob/13ab0b254e7b9ed0ab473d38d978fa100bf417ae/codex-rs/core/src/stream_events_utils.rs) emits a start immediately before completion when no previously active non-tool item exists. The [session event emitter](https://github.com/openai/codex/blob/13ab0b254e7b9ed0ab473d38d978fa100bf417ae/codex-rs/core/src/session/mod.rs) records wall-clock times around asynchronous work and completion contributors. A synthesized pair therefore need not have zero duration; one millisecond or a much longer duration cannot distinguish it from a genuine streaming lifecycle.
+
+Parser revision 8 consequently stops treating positive lifecycle time alone as a generation start. It does not assert that every such item was synthesized, and it does not infer a replacement start from a nearby turn, tool or previous response. An exact diagnostic stream start or a fully validated transport sequence remains usable. Persisted `item-event` provenance identifies the old parsing assumption for correction even after source logs are deleted. `tests/test_lifecycle_origin.py` verifies short/long intervals, messages/reasoning, later items, restart migration, independent timing preservation, exact revalidation, token conflicts and subsecond display precision.

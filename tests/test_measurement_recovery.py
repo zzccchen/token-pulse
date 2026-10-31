@@ -103,14 +103,15 @@ def test_duplicate_explicit_usage_does_not_consume_next_response_output():
     assert observed[-1].tps == 50
 
 
-def test_later_earlier_start_updates_history_without_a_parser_version_change(tmp_path):
+def test_later_independent_start_validates_history_without_a_parser_version_change(tmp_path):
     parser = ready()
     completed_item(parser, start=11)
     output(parser)
     usage(parser)
     original = parser.samples(LogEvidence())[0]
     revised = parser.samples(evidence(second=10))[0]
-    assert original.tps == 100 and revised.tps == 50
+    assert original.tps is None and revised.tps == 50
+    assert original.exclusion == "unverified_lifecycle_start"
     assert reconcile(original, revised).tps == 50
     assert reconcile(revised, original).tps == 50
     history = History(tmp_path / "history.sqlite")

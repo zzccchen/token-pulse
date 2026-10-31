@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.7 — Verified stream origins and historical thread configuration
+
+- Recover thread-owned `thread_settings_applied` snapshots as separate historical evidence. Validate fork ownership, event order, turn-start boundaries and exact turn overrides; missing evidence keeps Other rather than inheriting a parent, goal, or current global setting.
+- Parse supported `TurnStartOptions.service_tier` overrides separately from persistent submitted settings. Only an explicit absence of an override can bind a compatible pre-turn snapshot for a labeled mode fallback; request and server-confirmed values remain independent.
+- Expose snapshots, observation times, association reasons and turn overrides in record details/history and CSV. Preserve sample identity and TPS through enrichment, source loss, restart and transport reconciliation; earlier transport starts recheck snapshot validity.
+- Require an independent, exactly matched diagnostic stream start or a validated transport sequence. A positive `item_completed` lifecycle duration can be synthesized during completion handling and no longer establishes generation time by itself, regardless of duration or speed.
+- Correct saved pre-revision-8 lifecycle-only measurements at history startup, even without source files. Preserve identities, usage and tier evidence; protect saved independent timing from source loss and allow later independent evidence to revalidate the same record. Do not clamp or discard samples by TPS.
+- Preserve subsecond precision in timeline hover cards instead of rounding millisecond intervals to centiseconds or zero.
+- Bump measurement/transport parser revisions to 8 and recovery revision to 12. Add synthetic ownership, chronology, conflicts, incremental recovery, lifecycle-origin migration and bilingual UI regressions.
+
 ## 0.1.6 — Validated transport measurements and historical recovery
 
 - Exclude whole responses with unknown output-item scopes or unvalidated legacy usage counters. Preserve explicit usage records without output timing instead of dropping them.

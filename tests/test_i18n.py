@@ -7,11 +7,13 @@ from pathlib import Path
 from string import Formatter
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from token_pulse import i18n
 from token_pulse.collector import Snapshot
 from token_pulse.demo import demo_snapshot
+from token_pulse.domain import correct_legacy_lifecycle
 from token_pulse.history import export_csv
 from token_pulse.locales.en import MESSAGES
 from token_pulse.preferences import Preferences, load, save
@@ -59,6 +61,43 @@ def test_configuration_evidence_translates_and_retains_raw_values():
         i18n.set_language("zh_CN")
 
 
+def test_thread_snapshots_remain_distinct_in_bilingual_records_and_filters():
+    app = QApplication.instance() or QApplication([])
+    demo = demo_snapshot()
+    unknown, matched = demo.samples[2], demo.samples[4]
+    window = HistoryWindow()
+    try:
+        for language, title, association in (
+            ("zh_CN", "线程配置快照", "回合已关联"),
+            ("en", "Thread configuration snapshot", "turn matched"),
+        ):
+            i18n.set_language(language)
+            window.retranslate_ui()
+            window.apply([unknown, matched])
+            selector = window.filters["requested_tier"]
+            selector.setCurrentIndex(selector.findData(""))
+            window.retranslate_ui()
+            assert selector.currentData() == "" and len(window.filtered) == 2
+            assert window.table.horizontalHeaderItem(15).text() == title
+            by_key = {sample.key: sample for sample in window.filtered}
+            for row in range(window.table.rowCount()):
+                sample = by_key[window.table.item(row, 0).data(Qt.ItemDataRole.UserRole)]
+                assert window.table.item(row, 15).text() == "priority"
+                assert "synthetic-demo" in window.table.item(row, 15).toolTip()
+                assert window.table.item(row, 11).text() == i18n.tr("未知")
+                assert window.table.item(row, 12).text() == i18n.tr("未确认")
+                if sample.key == matched.key:
+                    assert association in window.table.item(row, 3).text()
+                    assert window.table.item(row, 16).text() == i18n.tr("明确无回合覆盖")
+                else:
+                    assert mode_info(sample)[0] == "other"
+                    assert window.table.item(row, 16).text() == i18n.tr("回合覆盖未知")
+            app.processEvents()
+    finally:
+        window.close()
+        i18n.set_language("zh_CN")
+
+
 def test_transport_records_show_timing_confirmation_and_specific_exclusions_in_both_languages():
     app = QApplication.instance() or QApplication([])
     original = demo_snapshot().samples[0]
@@ -88,6 +127,35 @@ def test_transport_records_show_timing_confirmation_and_specific_exclusions_in_b
             app.processEvents()
     finally:
         window.close()
+        i18n.set_language("zh_CN")
+
+
+def test_lifecycle_exclusions_keep_tokens_and_reason_in_both_languages():
+    app = QApplication.instance() or QApplication([])
+    base = demo_snapshot().samples[0]
+    corrected = correct_legacy_lifecycle(
+        replace(base, source="codex-local-log-v1", parser_revision=7, timing_source="item-event")
+    )
+    history, panel = HistoryWindow(), Panel()
+    try:
+        for language in ("zh_CN", "en"):
+            i18n.set_language(language)
+            history.retranslate_ui()
+            panel.retranslate_ui()
+            history.apply([corrected])
+            panel.apply(Snapshot(samples=(corrected,), at=corrected.ended_at + 1))
+            assert history.table.item(0, 4).text() == "—"
+            assert history.table.item(0, 5).text() == str(corrected.output_tokens)
+            assert history.table.item(0, 6).text() == "—"
+            assert history.table.item(0, 14).text() == i18n.tr(
+                "仅有生命周期时间，缺少独立的输出流起点"
+            )
+            assert i18n.tr("生命周期记录（流起点未确认）") in history.table.item(0, 14).toolTip()
+            assert not panel.chart.points
+            app.processEvents()
+    finally:
+        panel.close()
+        history.close()
         i18n.set_language("zh_CN")
 
 
@@ -156,7 +224,7 @@ def test_missing_and_invalid_language_settings_fall_back_to_system(tmp_path, val
 def test_bilingual_views_keep_statistics_filters_and_exports_identical(tmp_path):
     app = QApplication.instance() or QApplication([])
     snapshot = demo_snapshot()
-    base = snapshot.samples[-1]
+    base = snapshot.samples[2]  # Thread-only snapshot; no proven turn override.
     unknown = replace(
         base,
         response_id="unknown",

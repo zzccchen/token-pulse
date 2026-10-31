@@ -36,6 +36,7 @@ STATES = {
     "stale": "状态待确认",
 }
 ISSUES = {
+    "unverified_lifecycle_start": "仅有生命周期时间，缺少独立的输出流起点",
     "unconfirmed_initial_span": "首项起止时间重合，完整生成起点未确认",
     "unconfirmed_tool_start": "首项为工具调用，完整生成起点未确认",
     "unsupported_token_scope": "token 口径不支持合并测速",
@@ -138,6 +139,56 @@ def configuration_tag_label(ctx: Context) -> str:
         "unspecified": tr("未指定（不推断继承值）"),
         "ambiguous": tr("存在冲突，未采用"),
     }.get(ctx.config_tag_state, tr("未记录"))
+
+
+def turn_override_label(ctx: Context) -> str:
+    if ctx.turn_override_state == "set" and ctx.turn_override_tier:
+        return ctx.turn_override_tier
+    return {
+        "none": tr("明确无回合覆盖"),
+        "ambiguous": tr("回合覆盖证据冲突"),
+    }.get(ctx.turn_override_state, tr("回合覆盖未知"))
+
+
+def thread_configuration_label(ctx: Context) -> str:
+    if ctx.thread_config_state == "set" and ctx.thread_config_tier:
+        return ctx.thread_config_tier
+    return {
+        "unspecified": tr("快照未提供层级"),
+        "invalid": tr("快照层级格式不支持"),
+        "ambiguous": tr("同一时刻的线程配置冲突"),
+    }.get(ctx.thread_config_state, tr("未记录"))
+
+
+def thread_configuration_tooltip(ctx: Context) -> str:
+    if ctx.thread_config_state is None:
+        return tr("未记录")
+    binding = {
+        "matched": tr("已关联回合，提交明确无层级覆盖"),
+        "override_unknown": tr("回合覆盖未知，保留线程配置，不用于模式标记"),
+        "overridden": tr("存在独立回合覆盖，线程配置不代表回合层级"),
+        "ambiguous_override": tr("回合覆盖证据冲突"),
+        "submission_changed": tr("提交改变了线程设置，不使用旧快照标记模式"),
+        "during_turn": tr("快照晚于回合开始，仅保留线程配置"),
+        "after_output_start": tr("快照晚于输出起点，仅保留线程配置"),
+        "missing_turn": tr("缺少可匹配的回合开始，保留线程配置"),
+        "ambiguous_turn": tr("回合开始证据冲突"),
+        "unspecified": tr("快照未提供层级"),
+        "invalid": tr("快照层级格式不支持"),
+        "ambiguous": tr("同一时刻的线程配置冲突"),
+    }.get(ctx.thread_config_binding, tr("回合覆盖未知"))
+    stamp = (
+        datetime.fromtimestamp(ctx.thread_config_at).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        if ctx.thread_config_at is not None
+        else tr("未知")
+    )
+    return tr(
+        "{tier}\n快照观测时间：{stamp}\n来源：{source}\n{binding}\n线程配置不等于请求值或服务端实际层级。",
+        tier=thread_configuration_label(ctx),
+        stamp=stamp,
+        source=ctx.thread_config_source or tr("未记录"),
+        binding=binding,
+    )
 
 
 class Panel(QMainWindow):
@@ -554,6 +605,11 @@ class Panel(QMainWindow):
             ),
             (tr("请求层级"), observed("requested_tier", tr("未记录：未获取请求层级证据"))),
             (tr("实际层级"), observed("actual_tier", tr("未获服务端确认"))),
+            (
+                tr("线程配置快照"),
+                " / ".join(sorted({thread_configuration_label(c) for c in contexts})),
+            ),
+            (tr("回合覆盖设置"), " / ".join(sorted({turn_override_label(c) for c in contexts}))),
             (tr("当前全局配置"), " / ".join(sorted(configs)) if configs else tr("无当前快照")),
             (
                 tr("数据来源"),

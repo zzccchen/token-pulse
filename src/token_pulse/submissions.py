@@ -12,6 +12,9 @@ class SubmittedTier:
     at: float
     tier: str | None
     state: str  # set / cleared / unspecified / ambiguous
+    override_tier: str | None = None
+    override_state: str | None = None  # set / none / ambiguous; omission is unknown
+    override_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -187,10 +190,22 @@ def submitted_tier(task: str, at: float, body: str) -> tuple[str, SubmittedTier]
             tier, state = None, "cleared" if raw == "Some(None)" else "unspecified"
         else:
             return None
-        # A second override position has not been verified for this adapter. Do
-        # not guess its precedence, even if the thread settings contain a value.
-        if start.get("service_tier", "None") != "None":
-            tier, state = None, "ambiguous"
-        return identifier[1], SubmittedTier(at, tier, state)
+        # TurnStartOptions is a separate per-turn override, not a mutation of
+        # the thread preference. Only a literal None proves no such override.
+        raw_override = start.get("service_tier")
+        override = re.fullmatch(r'Some\("([a-z][a-z0-9_-]{0,39})"\)', raw_override or "")
+        override_tier = override[1] if override else None
+        override_state = (
+            "set"
+            if override
+            else "none"
+            if raw_override == "None"
+            else "ambiguous"
+            if raw_override is not None
+            else None
+        )
+        return identifier[1], SubmittedTier(
+            at, tier, state, override_tier, override_state, at if override_state else None
+        )
     except ValueError:
         return None

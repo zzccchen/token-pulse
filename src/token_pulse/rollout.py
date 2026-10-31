@@ -8,11 +8,13 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from token_pulse.domain import Context, Sample, Task
+from token_pulse.domain import Context, Sample, Task, bind_thread_config
 from token_pulse.logs import LogEvidence, label
+from token_pulse.tailer import AmbiguousObject
+from token_pulse.thread_settings import ThreadSettings
 
 REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
-PARSER_REVISION = 7
+PARSER_REVISION = 8
 GENERATED = {"reasoning", "function_call", "custom_tool_call"}
 TOOL_RESULTS = {"function_call_output", "custom_tool_call_output", "tool_search_output"}
 
@@ -98,13 +100,17 @@ class Rollout:
         self.history_start: int | None = None
         self.ordinal_inherited = False
         self.history_ordinal_missing = False
+        self.thread_settings = ThreadSettings(task_id)
 
     def damage(self, reason: str) -> None:
+        if reason in {"invalid_record", "out_of_order", "record_gap", "incomplete_boundary"}:
+            self.thread_settings.gap()
         if not self.damaged:
             self.damage_reason = reason
         self.damaged = True
 
     def reset(self, *, legacy: bool = True) -> None:
+        self.thread_settings.reset()
         self.items.clear()
         self.has_output = False
         self.first_output_kind = None
@@ -226,6 +232,7 @@ class Rollout:
         if not isinstance(kind, str) or (event is not None and not isinstance(event, str)):
             self.damage("invalid_record")
             return
+        metadata_ambiguous = isinstance(record, AmbiguousObject) or at < self.updated_at
         if at < self.updated_at - 0.001:
             self.damage("out_of_order")
         if kind == "session_meta":
@@ -236,6 +243,8 @@ class Rollout:
                     self.reset(legacy=False)
                     self.context = self.own_context
                 self.inherited = inherited
+                if inherited:
+                    self.thread_settings.reset()
             if not self.inherited:
                 self.context = replace(self.context, provider=label(value.get("model_provider")))
                 self.own_context = self.context
@@ -251,15 +260,31 @@ class Rollout:
         elif kind == "event_msg":
             if event == "item_completed":
                 self._item_timing(value)
-            elif event == "thread_settings_applied" and value.get("thread_id") == self.task_id:
+            elif event == "thread_settings_applied":
                 # Modern forks append a child-owned settings boundary after copied
                 # ancestor records. Older files resume with their own SessionMeta.
-                if self.inherited:
+                if self.inherited and value.get("thread_id") == self.task_id:
                     self.reset(legacy=False)
                     self.inherited = False
                     self.context = self.own_context
+                self.thread_settings.feed(
+                    value,
+                    at,
+                    inherited=self.inherited
+                    or self.ordinal_inherited
+                    or self.history_ordinal_missing,
+                    ambiguous=metadata_ambiguous,
+                )
             elif event == "task_started":
                 self._turn(str(value.get("turn_id", "")), at)
+                self.thread_settings.feed(
+                    value,
+                    at,
+                    inherited=self.inherited
+                    or self.ordinal_inherited
+                    or self.history_ordinal_missing,
+                    ambiguous=metadata_ambiguous,
+                )
             elif event in {"task_complete", "turn_aborted", "task_failed"}:
                 self.state = "idle" if event == "task_complete" else "error"
                 self.notice = None if event == "task_complete" else "request_failed"
@@ -428,6 +453,14 @@ class Rollout:
             issue = "missing_history_ordinal"
         if self.inherited or self.inherited_items or self.ordinal_inherited:
             issue = "inherited_history"
+        context = self.context
+        if issue != "inherited_history":
+            first = next(iter(self.items), None)
+            timing = self.item_timings.get(first)
+            before = timing.start if timing and not timing.ambiguous else self.items.get(first, at)
+            context = self.thread_settings.capture(
+                context, self.turn_id if turn_id is None else turn_id, before
+            )
         self.responses.append(
             Response(
                 self.turn_id if turn_id is None else turn_id,
@@ -435,7 +468,7 @@ class Rollout:
                 at,
                 tokens,
                 tuple(self.items.items()),
-                self.context,
+                context,
                 issue,
                 tuple(self.item_timings.get(item) for item in self.items),
                 self.first_output_kind,
@@ -493,7 +526,7 @@ class Rollout:
                 # cannot establish when all tokens in the response usage began, even
                 # if argument streaming subsequently lasts a long time.
                 issue = issue or "unconfirmed_tool_start"
-            context = response.context
+            context = self.thread_settings.validate(response.context, response.turn_id)
             start_at = None
             timing_source = None
             timings = response.timings or (None,) * len(response.items)
@@ -533,8 +566,6 @@ class Rollout:
             # is available, and fail closed if it contradicts that ordering.
             if first_start is None and first_timing is None:
                 issue = issue or "missing_start"
-            elif first_start is None and first_timing.start == first_timing.end:
-                issue = issue or "missing_stream_start"
             elif any(
                 start is not None and (start.ambiguous or start.turn_id != response.turn_id)
                 for start in starts
@@ -543,9 +574,21 @@ class Rollout:
                 for timing in timings
             ):
                 issue = issue or "ambiguous_response"
+            elif first_start is None:
+                # Core may synthesize both lifecycle events while handling an
+                # already completed item. Positive elapsed time includes local
+                # processing and cannot prove a streaming origin at any speed.
+                issue = issue or (
+                    "missing_stream_start"
+                    if first_timing.start == first_timing.end
+                    else "unverified_lifecycle_start"
+                )
+                if first_timing.start != first_timing.end:
+                    start_at = first_timing.start  # Retain the unverified observation for audit.
+                timing_source = "item-event"
             else:
-                start_at = first_start.at if first_start else first_timing.start
-                timing_source = "stream-log" if first_start else "item-event"
+                start_at = first_start.at
+                timing_source = "stream-log"
                 if any(
                     start is not None and (start.at < start_at - 0.001 or start.at > end + 0.001)
                     for start, (_, end) in zip(starts, response.items, strict=True)
@@ -573,6 +616,7 @@ class Rollout:
             ):
                 issue = issue or "interrupted_response"
             context = self._submitted(context, response.turn_id, end, evidence)
+            context = bind_thread_config(context, output_start=start_at)
             if tool_first:
                 start_at = None
                 timing_source = "tool-item-notification"
@@ -612,10 +656,17 @@ class Rollout:
                 submitted_tier=submitted.tier,
                 submitted_tier_state=submitted.state,
             )
+            if submitted.override_at is not None and submitted.override_at <= at + 0.001:
+                context = replace(
+                    context,
+                    turn_override_tier=submitted.override_tier,
+                    turn_override_state=submitted.override_state,
+                    turn_override_at=submitted.override_at,
+                )
         tag = evidence.config_tags.get((self.task_id, turn))
         if tag is not None and tag.at <= at + 0.001:
             context = replace(context, config_tag_tier=tag.tier, config_tag_state=tag.state)
-        return context
+        return bind_thread_config(context)
 
     def task(self, evidence: LogEvidence) -> Task:
         samples = [sample for sample in self.samples(evidence) if sample.issue not in REJECTIONS]

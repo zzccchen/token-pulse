@@ -15,7 +15,16 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from token_pulse.domain import Context, Sample, reconcile, resolve_response_alias
+from token_pulse.domain import (
+    Context,
+    Sample,
+    bind_thread_config,
+    correct_legacy_lifecycle,
+    merge_submitted_tier,
+    merge_turn_override,
+    reconcile,
+    resolve_response_alias,
+)
 from token_pulse.rollout import PARSER_REVISION
 from token_pulse.submissions import ConfigurationTag, SubmittedTier
 
@@ -74,6 +83,24 @@ class History:
             for key, reason, at in self.connection.execute("SELECT * FROM rejected_outputs")
         )
         self.rejection_cache: dict[tuple, Sample] = {}
+        self._correct_legacy_lifecycle()
+
+    def _correct_legacy_lifecycle(self) -> None:
+        # The saved timing_source itself proves use of the old parsing rule.
+        # Do not depend on files, diagnostic retention, or live-cache membership.
+        changes = []
+        for key, payload in self.connection.execute(
+            "SELECT key,payload FROM samples WHERE valid=1"
+        ):
+            original = self._decode(payload)
+            corrected = correct_legacy_lifecycle(original)
+            if corrected != original:
+                changes.append((json.dumps(asdict(corrected), allow_nan=False), key))
+        if changes:
+            with self.connection:
+                self.connection.executemany(
+                    "UPDATE samples SET valid=0,payload=? WHERE key=?", changes
+                )
 
     def is_rejected(self, sample: Sample) -> bool:
         return any(
@@ -226,6 +253,7 @@ class History:
         return resolve_response_alias(safe, self.aliases if aliases is None else aliases)
 
     def append(self, samples: list[Sample], *, now: float | None = None) -> int:
+        samples = [correct_legacy_lifecycle(sample) for sample in samples]
         now = time.time() if now is None else now
         cutoff = now - self.retention_days * 86400
         alias_map = {key: set(values) for key, values in self.aliases.items()}
@@ -479,11 +507,40 @@ class History:
             evidence = indexed.get((sample.task_id, sample.turn_id))
             enriched = sample
             if evidence is not None and evidence.at <= sample.ended_at + 0.001:
+                fields = {tier_field: evidence.tier, state_field: evidence.state}
+                if isinstance(evidence, SubmittedTier):
+                    fields.update(
+                        merge_submitted_tier(
+                            sample.context,
+                            Context(
+                                submitted_tier=evidence.tier, submitted_tier_state=evidence.state
+                            ),
+                        )
+                    )
+                if (
+                    isinstance(evidence, SubmittedTier)
+                    and evidence.override_state is not None
+                    and evidence.override_at is not None
+                    and evidence.override_at <= sample.ended_at + 0.001
+                ):
+                    fields.update(
+                        merge_turn_override(
+                            sample.context,
+                            Context(
+                                turn_override_tier=evidence.override_tier,
+                                turn_override_state=evidence.override_state,
+                                turn_override_at=evidence.override_at,
+                            ),
+                        )
+                    )
                 enriched = replace(
                     sample,
-                    context=replace(
-                        sample.context,
-                        **{tier_field: evidence.tier, state_field: evidence.state},
+                    context=bind_thread_config(
+                        replace(
+                            sample.context,
+                            **fields,
+                        ),
+                        output_start=sample.started_at,
                     ),
                 )
             result.append(enriched)

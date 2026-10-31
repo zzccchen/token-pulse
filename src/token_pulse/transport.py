@@ -17,7 +17,7 @@ from token_pulse.submissions import _TRACE_SPAN, _trace_fields, _unique_json
 
 SOURCE = "codex-transport-log-v1"
 TARGETS = ("codex_api::sse::responses", "codex_api::endpoint::responses_websocket")
-REVISION = 7
+REVISION = 8
 GENERATED = {"message", "reasoning", "function_call", "custom_tool_call"}
 TERMINALS = {"response.completed", "response.failed", "response.incomplete", "error"}
 CHANNELS = {

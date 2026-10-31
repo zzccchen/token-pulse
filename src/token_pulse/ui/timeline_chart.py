@@ -27,6 +27,10 @@ def mode_info(sample: Sample) -> tuple[str, str]:
     ctx = sample.context
     if ctx.requested_tier is not None:
         tier, evidence = ctx.requested_tier, tr("请求值")
+    elif ctx.turn_override_state == "ambiguous":
+        return "other", tr("回合覆盖证据冲突")
+    elif ctx.turn_override_state == "set" and ctx.turn_override_tier:
+        tier, evidence = ctx.turn_override_tier, tr("回合覆盖设置")
     elif ctx.submitted_tier_state == "cleared":
         return "standard", tr("普通（提交设置已清除覆盖）")
     elif ctx.submitted_tier_state == "set" and ctx.submitted_tier:
@@ -37,6 +41,8 @@ def mode_info(sample: Sample) -> tuple[str, str]:
         return "other", tr("配置标签冲突，模式未知")
     elif ctx.config_tag_state == "set" and ctx.config_tag_tier:
         tier, evidence = ctx.config_tag_tier, tr("配置标签")
+    elif ctx.thread_config_binding == "matched" and ctx.thread_config_tier:
+        tier, evidence = ctx.thread_config_tier, tr("线程配置快照，回合已关联")
     else:
         return "other", tr("模式未知")
     if tier == "ultrafast":
@@ -58,6 +64,8 @@ def mode_caption(sample: Sample) -> str:
     ctx = sample.context
     if ctx.requested_tier is not None:
         return mode
+    if ctx.turn_override_state in {"set", "ambiguous"}:
+        return mode_info(sample)[1]
     if ctx.submitted_tier_state == "cleared" or (
         ctx.submitted_tier_state == "set" and ctx.submitted_tier
     ):
@@ -66,18 +74,26 @@ def mode_caption(sample: Sample) -> str:
         return mode_info(sample)[1]
     if ctx.config_tag_state == "ambiguous":
         return tr("模式冲突")
+    if ctx.thread_config_binding == "matched":
+        return mode_info(sample)[1]
     return tr("模式冲突") if ctx.submitted_tier_state == "ambiguous" else tr("模式未知")
+
+
+def duration_text(seconds: float) -> str:
+    # Retain useful precision below one second, including sub-millisecond data.
+    # Two decimal places can turn a valid short interval into zero or 0.01 s.
+    return f"{seconds:.3g}" if seconds < 1 else f"{seconds:.2f}"
 
 
 def sample_text(sample: Sample) -> str:
     at = datetime.fromtimestamp(sample.ended_at).strftime("%m-%d %H:%M:%S")
     return tr(
-        "{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} 总输出 tokens · {seconds:.2f} 秒",
+        "{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} 总输出 tokens · {seconds} 秒",
         at=at,
         value=mode_caption(sample),
         tps=sample.tps,
         output_tokens=sample.output_tokens,
-        seconds=sample.seconds,
+        seconds=duration_text(sample.seconds),
     )
 
 
@@ -271,9 +287,9 @@ class TimelineChart(QWidget):
             )
             detail = metrics.horizontalAdvance(
                 tr(
-                    "{output_tokens:,} tokens · {seconds:.2f} 秒",
+                    "{output_tokens:,} tokens · {seconds} 秒",
                     output_tokens=sample.output_tokens,
-                    seconds=sample.seconds,
+                    seconds=duration_text(sample.seconds),
                 )
             )
             unit = metrics.horizontalAdvance("tokens/s") + 6
@@ -336,9 +352,9 @@ class TimelineChart(QWidget):
         painter.setPen(QColor(c["muted"]))
         painter.drawText(baseline + QPointF(rate_width + 6, 0), "tokens/s")
         detail = tr(
-            "{output_tokens:,} tokens · {seconds:.2f} 秒",
+            "{output_tokens:,} tokens · {seconds} 秒",
             output_tokens=sample.output_tokens,
-            seconds=sample.seconds,
+            seconds=duration_text(sample.seconds),
         )
         detail = QFontMetricsF(font).elidedText(
             detail, Qt.TextElideMode.ElideRight, text_rect.width()

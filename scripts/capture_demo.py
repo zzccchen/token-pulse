@@ -69,6 +69,13 @@ def main():
         QTest.qWait(180)
         if not widget.grab().save(str(args.output / f"{name}.png")):
             raise OSError("Could not save preview")
+        if name == "history":
+            widget.table.horizontalScrollBar().setValue(
+                widget.table.horizontalScrollBar().maximum()
+            )
+            app.processEvents()
+            if not widget.grab().save(str(args.output / "history-evidence.png")):
+                raise OSError("Could not save evidence preview")
         widget.hide()
 
 

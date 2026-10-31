@@ -16,6 +16,8 @@ Missing, malformed, or negative cumulative totals cannot validate legacy last-us
 
 Timing spans the first reliably identified generated item through the last output completion, including gaps within the stream. It excludes waiting before generation and tool execution after output. A usage notification may arrive after a tool finishes without extending generation time. Whole-turn time and tool-execution timestamps cannot substitute for output timing.
 
+An `item_completed` lifecycle interval cannot independently establish the output start, even when its duration is positive. Core can synthesize a start while processing an already completed item; elapsed time then includes local work rather than generation. A session-derived measurement therefore requires an exactly matched diagnostic first-item stream notification. Matching non-tool lifecycle ends can still avoid delayed rollout write times. A later item's start cannot repair an unverified first-item origin. This rule applies at every duration and speed, without assuming that a particular unsupported interval was buffered or estimating a replacement duration.
+
 For supported SSE/WebSocket log envelopes, the adapter validates a complete Responses sequence from `response.created` through `response.completed`. Event numbers must be contiguous; response, output-item, content-part and delta identities must agree. Exact duplicate events are ignored, while gaps, conflicting replays, unknown events and ambiguous interleaved responses exclude speed. Tokens come from final `usage.output_tokens`, never from delta counts or text length. The interval uses client log timestamps from the first item added through the last item done. It is a client-observed stream estimate, not server decode time; delayed final usage does not extend it. An empty final `output` array is acceptable only when the full event sequence establishes the item inventory. Tool-first and zero-duration initial items remain excluded.
 
 Explicit sampling-retry warnings within the same task and turn break a session-derived interval when they fall strictly between its output boundaries (`interrupted_response`). A pending item before a retry must not be joined to later output as uninterrupted generation. The adapter preserves usage and identity, but does not estimate or subtract the wait. Retries before the output start or after its completion do not invalidate that output; remote compaction and unrelated scopes are not sampling evidence. A complete, exactly identified transport sequence can independently establish its own interval.
@@ -27,6 +29,7 @@ Incomplete samples remain in coverage and history with an exclusion reason. Miss
 Important exclusions include:
 
 - Missing, non-finite, non-positive, conflicting, or unmatchable boundaries.
+- Lifecycle-only first-item timing without an independent matched stream origin (`unverified_lifecycle_start`). Retain usage and identity; do not treat positive lifecycle duration as proof of generation.
 - Unsupported token scopes, invalid counters, or incomplete usage.
 - Unknown output-item types: ignoring them could omit generation or include execution within the response. Keep the usage, but exclude the entire response instead of timing a recognized suffix (`unsupported_output_item`).
 - A first item that is a function/custom tool call: its notification already names the tool and cannot establish the beginning of all counted generation (`unconfirmed_tool_start`).
@@ -55,16 +58,34 @@ Windows are rolling 30-minute, 1-day, and 7-day ranges filtered by completion ti
 | Evidence | What it establishes |
 | --- | --- |
 | Configuration | Observed global setting; not necessarily a task or historical request setting |
+| Historical thread snapshot | A thread-owned preference observed at a specific time; turn association requires additional evidence |
 | Submitted setting | A value or instruction associated with a specific task and turn |
+| Turn override | An explicit per-turn start option, separate from the persistent thread preference |
 | Turn configuration tag | A sampling step's scoped client setting; not proof of submission, outbound request, or execution |
 | Request value | A value explicitly observed in outbound-request evidence |
 | Actual tier | Explicit `response.completed.response.service_tier` in supported transport logs; absent values remain unknown |
 
-Channel/provider and authentication mode are independent of tier. Mode markers prefer explicit request values, then submitted settings. Explicit `ultrafast` maps to Ultra Fast, while `priority` and `fast` map to Fast; explicit `default` or clearing an override maps to Standard. Ultra Fast uses an orange triangle, Fast a teal diamond, Standard a blue circle, and other/unrecorded modes a cross. All modes still contribute to the same model's window statistics. Raw tier values remain unchanged in record details, history, and CSV. Missing, unspecified, or conflicting evidence does not default to Standard. Display classification does not establish execution tier.
+Channel/provider and authentication mode are independent of tier. Mode markers prefer explicit request values, then an explicit turn override, then submitted thread settings, scoped configuration tags and finally a validated thread-snapshot association. Conflicting evidence blocks weaker fallbacks. Explicit `ultrafast` maps to Ultra Fast, while `priority` and `fast` map to Fast; explicit `default` or clearing a submitted thread override maps to Standard. Ultra Fast uses an orange triangle, Fast a teal diamond, Standard a blue circle, and other/unrecorded modes a cross. All modes still contribute to the same model's window statistics. Raw tier values remain unchanged in record details, history, and CSV. Missing, unspecified, or conflicting evidence does not default to Standard. Display classification does not establish execution tier.
 
-Submission parsing reads bounded outer fields and skips user content. `Some(None)` (clear), `None` (unspecified), and explicit values remain distinct. Contradictory evidence remains a conflict rather than being resolved by arrival order. An unsupported second override position is not assigned a guessed precedence.
+Submission parsing reads bounded outer fields and skips user content. Thread-setting `Some(None)` (clear), `None` (unspecified), and explicit values remain distinct. Supported `TurnStartOptions.service_tier` is stored separately: `Some("value")` is an explicit turn override, literal `None` proves no override, and an omitted field is unknown. Unsupported nonempty shapes are ambiguous. Contradictory evidence remains a conflict rather than being resolved by arrival order. A turn override never rewrites the observed thread preference.
 
-Scoped diagnostic feedback tags are stored independently as `config_tag_tier` and `config_tag_state` when every observed task and turn scope agrees. With no explicit request or decisive submission evidence, they provide a labeled fallback such as **Fast (configuration tag)**. They never populate submitted, requested, or actual tiers. A conflicting submission blocks the fallback; an unspecified submission permits it. `unset`, missing/null tags, or conflicting configuration tags do not imply Standard. Unscoped settings snapshots cannot fill a historical turn. History places the mode and evidence beside model and TPS, with each raw evidence category in its own column and in CSV.
+Scoped diagnostic feedback tags are stored independently as `config_tag_tier` and `config_tag_state` when every observed task and turn scope agrees. With no explicit request or decisive submission evidence, they provide a labeled fallback such as **Fast (configuration tag)**. They never populate submitted, requested, or actual tiers. A conflicting submission blocks the fallback; an unspecified submission permits it. `unset`, missing/null tags, or conflicting configuration tags do not imply Standard. History places the mode and evidence beside model and TPS, with each raw evidence category in its own column and in CSV.
+
+### Historical thread configuration
+
+The adapter reads only outer `thread_settings_applied.thread_id` and `thread_settings.service_tier` fields from session metadata. The explicit owner must match the indexed thread. Missing owners and parent snapshots are not inherited, including copied fork prefixes and subagent ordinal prefixes. Neither `history_base`, root-turn lineage nor a goal trigger supplies an owner or a service tier. A missing/null/`unset` snapshot tier stays unspecified, not Standard.
+
+Each sample stores the snapshot observation time, source, matched turn-start times and association status in `thread_config_*` fields. The timestamp records an observed applied configuration; it is not a reconstructed time of server execution. The latest snapshot preceding the exact turn start is frozen for that turn, because a mid-turn preference update can apply to subsequent turns. If no pre-turn snapshot is available, a snapshot before the first known output boundary can still be shown as thread-only evidence. Later snapshots never relabel earlier outputs. Where `task_started.started_at` provides integer Unix seconds, the beginning of that precision interval is the conservative start bound; older shapes use the task-start event timestamp. Invalid or contradictory boundaries cannot establish association.
+
+A **thread configuration snapshot, turn matched** mode fallback requires all of the following:
+
+- A valid, non-conflicting, thread-owned snapshot precedes the exact turn-start boundary in both event order and time, and does not follow the known output start.
+- A supported submission matches that exact thread and turn and explicitly records no per-turn tier override. Omitted fields, other turns and parent/root turns do not qualify. Its observation must be no later than the task-start event.
+- The submitted thread setting is unspecified or explicitly agrees with the snapshot. A clear, changed value or conflict prevents using the old snapshot.
+
+Otherwise the snapshot remains independently visible, with the reason association was not established; it does not remove Other. An explicit turn override is shown independently and takes precedence over the thread setting. Request and server-confirmed tiers remain untouched. Missing logs cannot establish absence of an override.
+
+The adapter bounds retained snapshots and turn starts, resets carry-forward state on unread gaps/ownership changes, and rejects duplicate JSON metadata fields. Plain and compressed recovery use the same rules. Recovery revision 12 rechecks existing completion checkpoints for snapshot association and measurement parser revision 8. Source loss or partial rereads preserve saved evidence, known override conflicts remain conflicts, and replacing timing with an earlier transport start rechecks the snapshot association.
 
 ## Identity and recovery
 
@@ -74,7 +95,9 @@ Transport and session records join by the same task, turn and response ID, or an
 
 Evidence enrichment preserves identity and valid TPS. Missing logs alone cannot invalidate a saved complete measurement. Newer parsers may correct proven incorrect boundaries or withdraw inherited/duplicate records, preserving the reason. Same-version legacy withdrawal notifications must not remove a sample that the parser already validated.
 
-Within the same parser revision, a matched diagnostic start earlier than the saved lifecycle start may extend the interval when response identity, tokens, token scope, source, and completion time agree. Replays with less evidence do not shorten it. Copied prefixes with explicit subagent ordinal boundaries are attributed to inherited history; referenced `history_base` files are not followed or counted again.
+Parser revision 8 withdraws saved pre-revision-8 valid session measurements explicitly marked `item-event`: this stored provenance proves use of the now-invalid lifecycle-origin assumption. The history migration does not require surviving logs or a live task entry. It preserves sample identity, tokens, observed timestamps, aliases and tier evidence while removing TPS, and old parser replays cannot restore that assumption. Retained lifecycle timestamps are unverified observations, not valid stream seconds; the exclusion reason and timing source remain explicit. Already saved independent diagnostic/transport timing survives source loss. A matching independent interval can revalidate the same record; repeated withdrawal notifications cannot erase it.
+
+Copied prefixes with explicit subagent ordinal boundaries are attributed to inherited history; referenced `history_base` files are not followed or counted again.
 
 Recovery completion records are committed only after corresponding samples have been saved. File changes, evidence changes, or a recovery revision invalidate reuse. Interrupted files and partial lines are not marked complete. These rules prevent live and historical collection from counting the same output twice.
 

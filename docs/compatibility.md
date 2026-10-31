@@ -55,12 +55,17 @@ Tray support depends on desktop protocols and extensions. Use `--no-tray` as a n
 
 The 0.1.6 transport adapter extracts an explicit `response.completed.response.service_tier` separately from client settings and request evidence. Missing fields remain unknown. Historical responses do not establish evidence for current requests. See [measurement](measurement.md) and [source evidence](source-audit.md).
 
+Version 0.1.7 also reads explicitly owned historical thread-setting snapshots and supported per-turn start overrides. It validates turn-start time, copied/fork ownership and exact submission scope before using a labeled configuration fallback. Thread-only snapshots remain visible even when override evidence is unavailable; they do not imply a request value or server execution tier. Older snapshots without owners remain unsupported for association. Recovery revision 12 re-evaluates retained session files with these rules and the lifecycle-origin correction.
+
+Measurement parser revision 8 requires an independent first-item diagnostic stream start or a complete validated transport sequence. Positive lifecycle timestamps alone cannot distinguish generated output from events synthesized during completion handling. Old saved lifecycle-only rates are corrected on history startup without deleting usage records; previously saved independent timing survives missing logs. Coverage may decrease where the necessary stream-origin evidence was never recorded or has rotated away.
+
 The 0.1.6 historical-format changes select databases by required tables/columns, checking both the root and its `sqlite/` directory, with an embedded `state_*.sqlite / logs` fallback. They recognize bounded older Debug item notifications and current scalar notifications. One compatible index and general diagnostic database is selected. Transport recovery separately considers up to eight compatible stores, validates each stream independently, and deduplicates normalized records across copies and session files using exact identities. This is format-shape support, not a claim of compatibility with every intervening Codex release.
 
 ## Bounded collection
 
 - Live tracking: up to 32 recent unarchived tasks; normal polling about every 2 seconds and discovery every 10 seconds.
 - Initial live tail: at most 4 MiB per session; incremental reads at most 2 MiB per poll. The live parser retains up to 300 responses.
+- Thread metadata: at most 512 snapshots and 512 turn starts per parser. Eviction or a missing prefix can limit later association; already captured sample evidence remains available. No unbounded parent-history traversal is performed.
 - Historical recovery: indexed sessions updated within seven days, including archived sessions, independent of live limits; from the beginning of each file in chunks of up to 8 MiB and 16 file operations per batch. New/changed files are discovered every 60 seconds; active recovery batches are spaced at most 0.25 seconds apart.
 - Without a usable index: probe the most recent three date directories and session-root files, rather than recursively scanning all history.
 - JSONL lines: at most 8 MiB. Partial lines wait for completion; interrupted files are not marked fully recovered.

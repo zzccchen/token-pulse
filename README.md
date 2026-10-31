@@ -21,7 +21,7 @@ English · [简体中文](README.zh-CN.md)
 
 - **One view per model.** Combine conversations over 30 minutes, 1 day, or 7 days; inspect the weighted average, median, range, and sample count.
 - **Every measured output.** Explore a scatter plot, hover for timing and tokens, and open the anonymous record. Keyboard navigation reaches overlapping points.
-- **Evidence behind the labels.** Inspect global configuration, turn configuration tags, submitted settings, request values, and server-confirmed values separately. Unknown stays unknown.
+- **Evidence behind the labels.** Inspect global configuration, thread snapshots, turn configuration tags, submitted settings, turn overrides, request values, and server-confirmed values separately. Unknown stays unknown.
 - **A quiet tray companion.** Show an optional speed number or use a normal window when a tray is unavailable.
 - **Local history.** Filter observations and export CSV. Light/dark themes, reduced effects, English, and Simplified Chinese are included.
 
@@ -29,7 +29,9 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
-**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.6), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
+Version 0.1.7 includes historical thread snapshots, validated turn associations, and automatic correction of lifecycle-only timing that could produce extreme TPS. Records and tokens are retained; historical measurable coverage can decrease when independent stream-origin evidence is unavailable. See the [measurement rules](docs/measurement.md).
+
+**Windows:** download the portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.7), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP.
 
 **From source (Windows or Linux):** you need **Python 3.11+** and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
@@ -69,7 +71,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.6** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
+TokenPulse is an early **0.1.7** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
 
 | Environment | Validation scope |
 | --- | --- |
