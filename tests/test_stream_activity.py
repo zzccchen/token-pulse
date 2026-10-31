@@ -55,6 +55,116 @@ def notification(*, second=5, **fields):
     return line("Reasoning summary part added payload=" + json.dumps(payload), second)
 
 
+def completion(*, second=12, task="task", turn="turn", item="item", parts=None):
+    parts = [] if parts is None else parts
+    return line(
+        f"Reasoning summary item completed itemId={item} summary={json.dumps(parts)} "
+        f"summaryPartCount={len(parts)} threadId={task} turnId={turn}",
+        second,
+    )
+
+
+@pytest.mark.parametrize("at,done", [(10, 12), (11, 12), (11, 11)])
+def test_queued_activity_can_prove_origin_via_ordered_completion(tmp_path, at, done):
+    logs, reader = LogEvidence(), DesktopFile(tmp_path / "notifications.log")
+    for raw in [binding(), notification(second=at), completion(second=done)]:
+        reader.accept(reader.tail.decode_line(raw), logs)
+    result = response().samples(logs)[0]
+    assert result.tps == 12.5
+    assert result.started_at == BASE + 2 and result.ended_at == BASE + 10
+    assert logs.activity("task", "turn", "item").completions == ((BASE + at, BASE + done),)
+
+
+@pytest.mark.parametrize(
+    "done",
+    [
+        completion(item="other"),
+        completion(task="other"),
+        completion(turn="other"),
+        completion(second=9),
+    ],
+)
+def test_delayed_activity_needs_exact_ordered_completion(tmp_path, done):
+    logs, reader = LogEvidence(), DesktopFile(tmp_path / "notifications.log")
+    for raw in [binding(), notification(second=11), done]:
+        reader.accept(reader.tail.decode_line(raw), logs)
+    assert response().samples(logs)[0].tps is None
+
+
+def test_delivery_pairs_cannot_cross_files_gaps_or_reverse_event_order(tmp_path):
+    logs, one, two = LogEvidence(), DesktopFile(tmp_path / "one"), DesktopFile(tmp_path / "two")
+    for reader, raw in [
+        (one, binding()),
+        (one, notification(second=11)),
+        (two, binding()),
+        (two, completion()),
+    ]:
+        reader.accept(reader.tail.decode_line(raw), logs)
+    assert response().samples(logs)[0].tps is None
+    one.gap()
+    for raw in [binding(), completion(), notification(second=11)]:
+        one.accept(one.tail.decode_line(raw), logs)
+    assert response().samples(logs)[0].tps is None
+    assert response(start=10, end=10).samples(logs)[0].tps is None
+
+
+def test_completion_content_never_creates_activity(tmp_path):
+    logs, reader = LogEvidence(), DesktopFile(tmp_path / "notifications.log")
+    for raw in [binding(), completion(parts=[notification().decode()])]:
+        reader.accept(reader.tail.decode_line(raw), logs)
+    assert not logs.activities
+    with pytest.raises(ValueError):
+        reader.tail.decode_line(completion().replace(b"summaryPartCount=0", b"summaryPartCount=1"))
+
+
+def test_delivery_pair_survives_restart_and_late_host_conflict(tmp_path):
+    path = tmp_path / "history.sqlite"
+    with closing(History(path)) as history:
+        logs, reader = LogEvidence(), DesktopFile(tmp_path / "notifications.log")
+        archive = EvidenceArchive(history.connection, history.anonymous_id, tmp_path)
+        archive.restore(logs, now=NOW)
+        for raw in [binding(), notification(second=11), completion()]:
+            reader.accept(reader.tail.decode_line(raw), logs)
+        archive.save(logs, now=NOW)
+    with closing(History(path)) as history:
+        restored = LogEvidence()
+        archive = EvidenceArchive(history.connection, history.anonymous_id, tmp_path)
+        archive.restore(restored, now=NOW)
+        assert response().samples(restored)[0].tps == 12.5
+        reader.accept(reader.tail.decode_line(binding("remote", second=15)), logs)
+        archive.save(logs, now=NOW)
+        archive.restore(restored, now=NOW)
+        assert response().samples(restored)[0].exclusion == "ambiguous_stream_activity"
+
+
+def test_revision_one_activity_archive_migrates_without_losing_saved_proof(tmp_path):
+    with closing(History(tmp_path / "history.sqlite")) as history:
+        db = history.connection
+        db.execute(
+            "CREATE TABLE stream_activity(scope,task,turn,item,times,ambiguous,last_at,revision, "
+            "PRIMARY KEY(scope,task,turn,item))"
+        )
+        anon = history.anonymous_id
+        db.execute(
+            "INSERT INTO stream_activity VALUES(?,?,?,?,?,?,?,1)",
+            (
+                anon("evidence-root", str(tmp_path.resolve())),
+                anon("task", "task"),
+                anon("turn", "turn"),
+                anon("item", "item"),
+                json.dumps([BASE + 5]),
+                0,
+                BASE + 5,
+            ),
+        )
+        db.commit()
+        logs = LogEvidence()
+        archive = EvidenceArchive(db, anon, tmp_path)
+        archive.restore(logs, now=NOW)
+        assert response().samples(logs)[0].tps == 12.5
+        assert logs.activity("task", "turn", "item").completions == ()
+
+
 def test_activity_validates_original_start_not_notification_time():
     parser, logs = response(), LogEvidence()
     original = parser.samples(logs)[0]

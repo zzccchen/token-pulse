@@ -12,12 +12,13 @@ from pathlib import Path
 
 from token_pulse.logs import LogEvidence
 from token_pulse.rollout import timestamp
-from token_pulse.stream_activity import ACTIVITY_REVISION, Activity
+from token_pulse.stream_activity import ACTIVITY_REVISION, Activity, merge_activity
 from token_pulse.tailer import JsonlTail, json_object
 
 HEADER = re.compile(r"^(\S+) (info|warning) \[([^\]]+)\] (.*)$")
 BINDING = "mcp_server_startup_status_updated "
 SUMMARY = "Reasoning summary part added payload="
+COMPLETED = "Reasoning summary item completed "
 HOST = re.compile(
     r"hostId=([^\s=]+) server=[^\s=]+ "
     r"status=(?:starting|ready|failed|cancelled) threadId=([A-Za-z0-9_-]+)"
@@ -47,7 +48,11 @@ class DesktopTail(JsonlTail):
             "electron-message-handler",
             "host-app-server-manager",
         } and body.startswith(SUMMARY)
-        if not binding and not summary:
+        completed = logger in {
+            "electron-message-handler",
+            "host-app-server-manager",
+        } and body.startswith(COMPLETED)
+        if not binding and not summary and not completed:
             return None
         at = timestamp(date)
         if at is None:
@@ -77,6 +82,34 @@ class DesktopTail(JsonlTail):
             return {"kind": "host", "at": at, "task": task, "host": host}
         if level != "info":
             raise ValueError("Unsupported notification level")
+        if completed:
+            head = re.match(
+                r"itemId=([A-Za-z0-9_-]{1,256})" + SUFFIX.pattern + r" summary=",
+                body[len(COMPLETED) :],
+            )
+            if head is None:
+                raise ValueError("Unsupported completion envelope")
+            tail = body[len(COMPLETED) + head.end() :]
+            parts, end = json.JSONDecoder().raw_decode(tail)
+            fields = re.fullmatch(
+                r" summaryPartCount=(\d+) threadId=([A-Za-z0-9_-]{1,256}) "
+                r"turnId=([A-Za-z0-9_-]{1,256})",
+                tail[end:],
+            )
+            if (
+                fields is None
+                or not isinstance(parts, list)
+                or not all(isinstance(p, str) for p in parts)
+                or len(parts) != int(fields[1])
+            ):
+                raise ValueError("Conflicting completion fields")
+            return {
+                "kind": "completed",
+                "at": at,
+                "task": fields[2],
+                "turn": fields[3],
+                "item": head[1],
+            }
         value, end = json.JSONDecoder(object_pairs_hook=json_object).raw_decode(
             body[len(SUMMARY) :]
         )
@@ -113,6 +146,7 @@ class DesktopFile:
         self.hosts: dict[str, tuple[str, float]] = {}
         self.owners: dict[str, str] = {}
         self.observed: dict[tuple[str, str, str], Activity] = {}
+        self.pending_activity: dict[tuple[str, str, str], Activity] = {}
         self.version: tuple | None = None
         self.blocked = False
 
@@ -120,10 +154,12 @@ class DesktopFile:
         self.hosts.clear()
         self.owners.clear()
         self.observed.clear()
+        self.pending_activity.clear()
         self.blocked = False
 
     def gap(self) -> None:
         self.hosts.clear()
+        self.pending_activity.clear()
 
     def overflow(self, evidence: LogEvidence) -> None:
         for key, value in self.observed.items():
@@ -152,12 +188,24 @@ class DesktopFile:
                 return
             self.hosts[task] = (host, at)
             self.owners[task] = host
-        elif kind == "activity":
+        elif kind in {"activity", "completed"}:
             binding = self.hosts.get(task)
             if binding is None or binding[0] != "local" or binding[1] > at:
                 return
             key = task, record["turn"], record["item"]
-            value = Activity((float(at),))
+            if kind == "completed":
+                previous = self.pending_activity.pop(key, None)
+                if previous is None or any(t > at for t in previous.times):
+                    return
+                value = Activity(
+                    previous.times,
+                    previous.ambiguous,
+                    tuple((t, float(at)) for t in previous.times),
+                )
+            else:
+                value = Activity((float(at),))
+                previous = self.pending_activity.get(key)
+                self.pending_activity[key] = merge_activity(previous, value) if previous else value
             evidence.record_activity(*key, value)
             self.observed[key] = evidence.activities[key]
             if len(self.observed) > min(evidence.capacity, 4096):

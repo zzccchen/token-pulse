@@ -157,6 +157,7 @@ class Sample:
     timing_source: str | None = None
     response_aliases: tuple[str, ...] = ()
     evidence_sources: tuple[str, ...] = ()
+    response_kind: str | None = None
 
     @property
     def exclusion(self) -> str | None:
@@ -249,6 +250,7 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         "missing_start",
         "missing_stream_start",
         "missing_output_items",
+        "compaction_usage",
         "unconfirmed_tool_start",
         "unconfirmed_initial_span",
     }
@@ -354,6 +356,11 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     )
     return replace(
         base,
+        response_kind=incoming.response_kind or previous.response_kind,
+        issue="compaction_usage"
+        if (incoming.response_kind or previous.response_kind) == "compaction"
+        and base.issue == "missing_output_items"
+        else base.issue,
         response_aliases=aliases,
         evidence_sources=sources
         if transport or previous.evidence_sources or incoming.evidence_sources

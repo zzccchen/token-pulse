@@ -124,6 +124,20 @@ def test_long_rollout_is_drained_without_tail_or_response_ring_loss(tmp_path):
     history.close()
 
 
+def test_large_valid_input_within_resource_limit_does_not_poison_following_output(tmp_path):
+    path = tmp_path / "large-input.jsonl"
+    evidence = source(path, "task", count=3, padding=9 * 1024 * 1024 // 7)
+    assert 8 * 1024 * 1024 < path.stat().st_size < 16 * 1024 * 1024
+    recovery = Backfill(budget=512 * 1024)
+    recovery.add("task", path, Context(), live=False, evidence=evidence)
+    samples = []
+    while recovery.pending:
+        values, issues = recovery.poll(evidence, NOW)
+        assert not issues
+        samples.extend(values)
+    assert len(samples) == 3 and all(s.tps == 100 for s in samples)
+
+
 def test_append_partial_line_and_unavailable_file_are_retried(tmp_path):
     path = tmp_path / "short.jsonl"
     evidence = source(path, "task", count=1)

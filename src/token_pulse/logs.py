@@ -195,7 +195,11 @@ class LogEvidence:
         )
         value = merge_activity(saved, live) if saved and live else saved or live
         if value and self.archive_floor is not None:
-            value = replace(value, times=tuple(t for t in value.times if t > self.archive_floor))
+            value = replace(
+                value,
+                times=tuple(t for t in value.times if t > self.archive_floor),
+                completions=tuple(p for p in value.completions if p[0] > self.archive_floor),
+            )
         return value
 
     def activity_fingerprint(self, task: str) -> list[tuple]:
@@ -206,7 +210,9 @@ class LogEvidence:
                 continue
             key = (anon("turn", turn), anon("item", item)) if anon else (turn, item)
             values[key] = merge_activity(values[key], activity) if key in values else activity
-        return sorted((key, value.times, value.ambiguous) for key, value in values.items())
+        return sorted(
+            (key, value.times, value.ambiguous, value.completions) for key, value in values.items()
+        )
 
     def start(self, task: str, item: str, turn: str) -> Start | None:
         live = self.starts.get((task, item))

@@ -38,6 +38,7 @@ STATES = {
 ISSUES = {
     "unverified_lifecycle_start": "仅有生命周期时间，缺少独立的输出流起点",
     "ambiguous_stream_activity": "流式活动证据的归属存在冲突",
+    "compaction_usage": "上下文压缩用量，没有普通输出流计时",
     "unconfirmed_initial_span": "首项起止时间重合，完整生成起点未确认",
     "unconfirmed_tool_start": "首项为工具调用，完整生成起点未确认",
     "unsupported_token_scope": "token 口径不支持合并测速",

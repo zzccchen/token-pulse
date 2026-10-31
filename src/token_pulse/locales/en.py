@@ -405,4 +405,7 @@ MESSAGES = {
     ),
     "经流式活动验证的生命周期起点": "Lifecycle start verified by streaming activity",
     "流式活动证据的归属存在冲突": "Conflicting ownership of streaming activity evidence",
+    "上下文压缩用量，没有普通输出流计时": (
+        "Context-compaction usage; no ordinary output-stream timing"
+    ),
 }

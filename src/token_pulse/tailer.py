@@ -39,7 +39,7 @@ class JsonlTail:
         path: Path,
         *,
         budget: int = 2 * 1024 * 1024,
-        max_line: int = 8 * 1024 * 1024,
+        max_line: int = 16 * 1024 * 1024,
         backfill: int | None = 4 * 1024 * 1024,
     ):
         if min(budget, max_line) <= 0 or (backfill is not None and backfill <= 0):

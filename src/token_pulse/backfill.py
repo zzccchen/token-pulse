@@ -25,7 +25,7 @@ class Source:
 
 
 # Bump when rollout interpretation changes so unchanged files are re-evaluated.
-RECOVERY_REVISION = 14
+RECOVERY_REVISION = 15
 
 
 def fingerprint(source: Source, evidence: LogEvidence) -> str:

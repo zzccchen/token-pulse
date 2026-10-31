@@ -2,10 +2,12 @@
 
 ## Unreleased
 
-- Corroborate a retained first reasoning-item lifecycle start with independently logged streaming activity. Require exact identities, strict interior timing and prior explicit local-host ownership in the same desktop file; never replace a missing start with notification time.
-- Add bounded incremental desktop collection and HMAC-only activity persistence, deduplicated evidence, conflict handling, partial-line recovery and restart-safe completion checks. Preserve usage, identity and existing retry/fork validation; label the additional timing provenance.
+- Corroborate a retained first reasoning-item lifecycle start with independently logged streaming activity. Require exact identities and prior explicit local-host ownership in the same desktop file. Accept either an interior activity timestamp or an ordered activity/completion delivery pair for queued notifications; keep the original boundaries and reject gaps and conflicts.
+- Identify item-less compaction accounting using an explicit compaction response ID and matching owned usage snapshot. Preserve response identity, tokens, token scope and saved valid timing; persist/export response purpose separately and retain unresolved records in coverage.
+- Increase the bounded JSONL line limit from 8 to 16 MiB so intact large input/tool-result records do not poison following responses. Partial, damaged and larger unsupported lines still fail closed.
+- Add bounded incremental desktop collection and HMAC-only activity persistence, deduplicated evidence, conflict handling, partial-line recovery and restart-safe completion checks. Migrate existing activity evidence without loss. Preserve usage, identity and existing retry/fork validation; label the additional timing provenance.
 - Revisit previously scanned live history when late activity evidence concerns its older prefix. New output beyond that prefix does not trigger a whole-file reread, and evidence arriving mid-scan cannot acknowledge a stale completion check.
-- Use measurement/transport parser revision 10 and recovery revision 14. Preserve stronger saved intervals during activity enrichment and recheck cross-source conflicts. Historical coverage remains an acceptance gate separate from outlier removal and storage integrity.
+- Use measurement/transport parser revision 11 and recovery revision 15. Preserve stronger saved intervals during activity enrichment and recheck cross-source conflicts. Historical coverage remains an acceptance gate separate from outlier removal and storage integrity. Reference-only coverage calculations remain separate from production statistics and do not establish accurate TPS.
 
 ## 0.1.9 — Keep history and journals in one physical directory
 

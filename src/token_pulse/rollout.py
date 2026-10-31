@@ -14,7 +14,7 @@ from token_pulse.tailer import AmbiguousObject
 from token_pulse.thread_settings import ThreadSettings
 
 REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
-PARSER_REVISION = 10
+PARSER_REVISION = 11
 # This shadow only withdraws revision-1 split-usage records. An unrelated parser
 # upgrade must not make the same legacy observation override newer saved proof.
 LEGACY_WITHDRAWAL_REVISION = 2
@@ -59,6 +59,7 @@ class Response:
     timings: tuple[ItemTiming | None, ...] = ()
     first_kind: str | None = None
     usage_issue: str | None = None
+    response_kind: str | None = None
 
 
 class Rollout:
@@ -84,6 +85,7 @@ class Rollout:
         self.first_output_kind: str | None = None
         self.item_timings: OrderedDict[str, ItemTiming] = OrderedDict()
         self.responses: deque[Response] = deque(maxlen=300)
+        self.recent_usage: OrderedDict[tuple[str, str], Response] = OrderedDict()
         self.corrections: deque[Response] = deque(maxlen=300)
         self.seen: set[str] = set()
         self.boundary = False
@@ -122,6 +124,7 @@ class Rollout:
         self.first_output_kind = None
         self.legacy_candidate = None
         self.item_timings.clear()
+        self.recent_usage.clear()
         self.boundary = False
         self.damaged = True
         self.damage_reason = "incomplete_boundary"
@@ -266,6 +269,8 @@ class Rollout:
             if not self.inherited:
                 self.context = replace(self.context, provider=label(value.get("model_provider")))
                 self.own_context = self.context
+        elif kind == "compacted":
+            self._compaction(value, at, ambiguous=metadata_ambiguous)
         elif kind == "turn_context":
             new_turn = value.get("turn_id")
             if isinstance(new_turn, str) and new_turn != self.turn_id:
@@ -499,6 +504,7 @@ class Rollout:
             self.corrections.append(replace(candidate, issue="superseded_usage"))
             response = replace(candidate, id=response_id, usage_issue=None)
             self.responses.append(response)
+            self._remember_usage(response)
             self.seen.add(response_id)
             self.legacy_candidate = None
             return
@@ -540,6 +546,8 @@ class Rollout:
             )
         )
         self.legacy_candidate = self.responses[-1] if legacy else None
+        if explicit_id:
+            self._remember_usage(self.responses[-1])
         self.seen = {r.id for r in self.responses}
         for item in self.items:
             self.item_timings.pop(item, None)
@@ -550,6 +558,72 @@ class Rollout:
         self.damaged = False
         self.damage_reason = None
         self.inherited_items = False
+
+    def _remember_usage(self, response: Response) -> None:
+        self.recent_usage[response.turn_id, response.id] = response
+        self.recent_usage.move_to_end((response.turn_id, response.id))
+        while len(self.recent_usage) > 1000:
+            self.recent_usage.popitem(last=False)
+
+    def _compaction(self, value: dict, at: float, *, ambiguous: bool) -> None:
+        """An exact owned compaction ID classifies usage, never supplies a stream."""
+        if (
+            ambiguous
+            or isinstance(value, AmbiguousObject)
+            or self.inherited
+            or self.ordinal_inherited
+            or self.history_ordinal_missing
+        ):
+            return
+        response_id = value.get("compaction_response_id")
+        snapshot = value.get("latest_token_usage_record")
+        if (
+            not isinstance(response_id, str)
+            or not 0 < len(response_id) <= 160
+            or type(snapshot) is not dict
+        ):
+            return
+        turn = snapshot.get("turn_id")
+        if (
+            snapshot.get("response_id") != response_id
+            or snapshot.get("thread_id") != self.task_id
+            or not isinstance(turn, str)
+        ):
+            return
+        usage = snapshot.get("usage")
+        previous = self.recent_usage.get((turn, response_id))
+        if (
+            previous is None
+            or bool(previous.items)
+            or previous.issue in REJECTIONS
+            or previous.at > at
+            or type(usage) is not dict
+            or type(usage.get("output_tokens")) is not int
+            or usage["output_tokens"] != previous.tokens
+        ):
+            return
+        corrected = replace(
+            previous,
+            response_kind="compaction",
+            issue="compaction_usage",
+            items=(),
+            timings=(),
+            first_kind=None,
+        )
+        present = any(r.turn_id == turn and r.id == response_id for r in self.responses)
+        if present:
+            self.responses = deque(
+                (
+                    corrected if r.turn_id == turn and r.id == response_id else r
+                    for r in self.responses
+                ),
+                maxlen=300,
+            )
+        elif corrected != previous:
+            # Recovery may already have persisted the usage batch. Re-emit its
+            # stable identity rather than relying on adjacency or nearby tokens.
+            self.corrections.append(corrected)
+        self.recent_usage[turn, response_id] = corrected
 
     def _item_timing(self, value: dict) -> None:
         if value.get("thread_id") != self.task_id:
@@ -611,6 +685,7 @@ class Rollout:
                         response.tokens,
                         context=self._submitted(context, response.turn_id, response.at, evidence),
                         issue=issue or "missing_output_items",
+                        response_kind=response.response_kind,
                         parser_revision=revision,
                     )
                 )
@@ -626,7 +701,14 @@ class Rollout:
                 and first_timing.turn_id == response.turn_id
                 and activity is not None
                 and not activity.ambiguous
-                and any(first_timing.start < at < first_timing.end for at in activity.times)
+                and (
+                    any(first_timing.start < at < first_timing.end for at in activity.times)
+                    or first_timing.start < first_timing.end
+                    and any(
+                        first_timing.start < at <= delivered and first_timing.end <= delivered
+                        for at, delivered in activity.completions
+                    )
+                )
             )
             coincident_start = (
                 first_timing is not None
@@ -730,6 +812,7 @@ class Rollout:
                     start_at,
                     context,
                     issue=issue,
+                    response_kind=response.response_kind,
                     parser_revision=revision,
                     timing_source=timing_source,
                     response_aliases=(
