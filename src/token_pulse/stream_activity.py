@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-ACTIVITY_REVISION = 2
+ACTIVITY_REVISION = 3
 
 
 @dataclass(frozen=True)

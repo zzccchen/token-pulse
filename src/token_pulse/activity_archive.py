@@ -28,9 +28,11 @@ class ActivityArchive:
                 db.execute(
                     "ALTER TABLE stream_activity ADD COLUMN completions TEXT NOT NULL DEFAULT '[]'"
                 )
-            # Revision 1's strict interior observations remain valid evidence.
+            # Existing interior observations and ordered delivery pairs remain
+            # valid; writer continuity changes acquisition, not their schema.
             db.execute(
-                "UPDATE stream_activity SET revision=? WHERE revision=1", (ACTIVITY_REVISION,)
+                "UPDATE stream_activity SET revision=? WHERE revision IN (1,2)",
+                (ACTIVITY_REVISION,),
             )
 
     def restore(self, evidence, *, now):

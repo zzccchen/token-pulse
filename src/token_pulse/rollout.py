@@ -14,7 +14,7 @@ from token_pulse.tailer import AmbiguousObject
 from token_pulse.thread_settings import ThreadSettings
 
 REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
-PARSER_REVISION = 11
+PARSER_REVISION = 12
 # This shadow only withdraws revision-1 split-usage records. An unrelated parser
 # upgrade must not make the same legacy observation override newer saved proof.
 LEGACY_WITHDRAWAL_REVISION = 2
