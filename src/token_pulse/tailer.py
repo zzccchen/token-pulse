@@ -107,17 +107,20 @@ class JsonlTail:
             if complete:
                 if not self.dropping and self.pending.strip():
                     try:
-                        record = json.loads(self.pending, object_pairs_hook=json_object)
-                        if isinstance(record, dict):
+                        record = self.decode_line(self.pending)
+                        if record is not None:
                             batch.records.append(record)
-                        else:
-                            batch.malformed += 1
-                            batch.gaps.append(len(batch.records))
                     except (ValueError, UnicodeError, RecursionError):
                         batch.malformed += 1
                         batch.gaps.append(len(batch.records))
                 self.pending = b""
                 self.dropping = False
+
+    def decode_line(self, line: bytes) -> dict | None:
+        record = json.loads(line, object_pairs_hook=json_object)
+        if not isinstance(record, dict):
+            raise ValueError("Expected a JSON object")
+        return record
 
 
 class ZstdJsonlTail(JsonlTail):

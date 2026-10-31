@@ -25,7 +25,7 @@ class Source:
 
 
 # Bump when rollout interpretation changes so unchanged files are re-evaluated.
-RECOVERY_REVISION = 13
+RECOVERY_REVISION = 14
 
 
 def fingerprint(source: Source, evidence: LogEvidence) -> str:
@@ -46,6 +46,7 @@ def fingerprint(source: Source, evidence: LogEvidence) -> str:
             if task == source.task
         ),
         evidence.interruption_fingerprint(source.task),
+        evidence.activity_fingerprint(source.task),
     )
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
@@ -63,12 +64,29 @@ class Backfill:
         self.queued: set[str] = set()
         self.done: dict[str, tuple[Path, tuple[int, int]]] = {}
         self.done_stamps: dict[str, str] = {}
+        self.done_through: dict[str, float] = {}
         self.active: tuple[Source, JsonlTail, Rollout] | None = None
         self.checkpoints: dict[str, str] = {}
         self.completed: dict[str, tuple[str, float]] = {}
         self.checkpoint_key: Callable[[str, Path], str] | None = None
         self.reused = 0
         self.active_stamp = ""
+        self.active_evidence_changed_at = float("inf")
+
+    def evidence_changed(self, task: str, at: float) -> None:
+        """Revisit older live history when late proof predates its last scan.
+
+        New output after that scan belongs to live collection. A reused checkpoint
+        has no in-memory boundary yet and is rechecked once when evidence changes.
+        """
+        if task in self.done and at <= self.done_through.get(task, float("inf")):
+            previous = self.done.pop(task)
+            if self.checkpoint_key:
+                self.completed.pop(self.checkpoint_key(task, previous[0]), None)
+            self.done_stamps.pop(task, None)
+            self.done_through.pop(task, None)
+        if self.active and self.active[0].task == task:
+            self.active_evidence_changed_at = min(self.active_evidence_changed_at, at)
 
     def add(
         self,
@@ -114,9 +132,11 @@ class Backfill:
                 source = self.queue.popleft()
                 key = self.checkpoint_key(source.task, source.path) if self.checkpoint_key else None
                 self.active_stamp = fingerprint(source, evidence)
+                self.active_evidence_changed_at = float("inf")
                 if key and self.checkpoints.get(key) == self.active_stamp:
                     self.done[source.task] = source.path, source.version
                     self.done_stamps[source.task] = self.active_stamp
+                    self.done_through.pop(source.task, None)
                     self.queued.discard(source.task)
                     self.reused += 1
                     continue
@@ -178,9 +198,15 @@ class Backfill:
                 except OSError:
                     unchanged = False
                     issues.add("source_unavailable")
-                if unchanged and not tail.pending and not tail.dropping:
+                if (
+                    unchanged
+                    and not tail.pending
+                    and not tail.dropping
+                    and self.active_evidence_changed_at > rollout.updated_at
+                ):
                     self.done[source.task] = source.path, source.version
                     self.done_stamps[source.task] = self.active_stamp
+                    self.done_through[source.task] = rollout.updated_at
                     if self.checkpoint_key:
                         key = self.checkpoint_key(source.task, source.path)
                         self.completed[key] = self.active_stamp, now

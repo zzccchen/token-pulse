@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Corroborate a retained first reasoning-item lifecycle start with independently logged streaming activity. Require exact identities, strict interior timing and prior explicit local-host ownership in the same desktop file; never replace a missing start with notification time.
+- Add bounded incremental desktop collection and HMAC-only activity persistence, deduplicated evidence, conflict handling, partial-line recovery and restart-safe completion checks. Preserve usage, identity and existing retry/fork validation; label the additional timing provenance.
+- Revisit previously scanned live history when late activity evidence concerns its older prefix. New output beyond that prefix does not trigger a whole-file reread, and evidence arriving mid-scan cannot acknowledge a stale completion check.
+- Use measurement/transport parser revision 10 and recovery revision 14. Preserve stronger saved intervals during activity enrichment and recheck cross-source conflicts. Historical coverage remains an acceptance gate separate from outlier removal and storage integrity.
+
 ## 0.1.9 — Keep history and journals in one physical directory
 
 - Resolve the actual writable destination from an opened handle before taking the instance lock. Reject split main/journal layouts before writable SQLite access; do not rely on package names or logical path strings.

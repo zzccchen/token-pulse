@@ -50,6 +50,7 @@ Tray support depends on desktop protocols and extensions. Use `--no-tray` as a n
 | `state_*.sqlite / threads` | Indexed paths, recent task snapshots, model and provider context | Current settings cannot fill historical request values |
 | Session JSONL / `.jsonl.zst` | Turn context, output items, usage, lifecycle events and state | Inherited history and repeated usage are not new output; compressed archives are recovered sequentially |
 | `logs_*.sqlite / logs` | Item starts, scoped submissions and configuration tags, request/auth evidence, explicit ignored-tier warnings | Only known outer structures and event shapes are parsed |
+| Windows desktop `Codex/Logs/YYYY/MM/DD/*.log` | Independently corroborate a first reasoning item's retained lifecycle start | Requires supported notification shapes, exact identities and prior explicit local-host ownership in the same file; no unverified Linux discovery path |
 | SSE/WebSocket events in compatible `logs` tables | Completed-response usage, client item timing, explicit returned service tier | Contiguous sequences, unambiguous routing and complete item/content boundaries are required |
 | `config.toml` | Current global `service_tier` snapshot | Does not resolve every project, task, or CLI override |
 
@@ -65,7 +66,10 @@ The 0.1.6 historical-format changes select databases by required tables/columns,
 
 ## Bounded collection
 
+The unreleased activity adapter uses parser revision 10 and recovery revision 14. Streaming activity can validate an existing lifecycle start even when its separate diagnostic start has rotated out. It does not move the start to a later notification or estimate missing time. Provenance, conflicts and observed activity times survive restart separately from origin evidence.
+
 - Live tracking: up to 32 recent unarchived tasks; normal polling about every 2 seconds and discovery every 10 seconds.
+- Desktop activity: discover nine recent UTC date directories once per minute, at most 256 files; read at most 8 MiB per poll and 32 KiB per line. Track at most 4,096 identities per file, 20,000 live activity items and 64 observation times per item; overflow cannot validate a lifecycle. Persist at most 100,000 HMAC-only activity items within history retention. Unsupported shapes degrade without searching arbitrary content. Changed files replay their ownership prefix after restart; incomplete lines are never checkpointed.
 - Initial live tail: at most 4 MiB per session; incremental reads at most 2 MiB per poll. The live parser retains up to 300 responses.
 - Thread metadata: at most 512 snapshots and 512 turn starts per parser. Eviction or a missing prefix can limit later association; already captured sample evidence remains available. No unbounded parent-history traversal is performed.
 - Historical recovery: indexed sessions updated within seven days, including archived sessions, independent of live limits; from the beginning of each file in chunks of up to 8 MiB and 16 file operations per batch. New/changed files are discovered every 60 seconds; active recovery batches are spaced at most 0.25 seconds apart.

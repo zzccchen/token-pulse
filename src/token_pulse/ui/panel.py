@@ -37,6 +37,7 @@ STATES = {
 }
 ISSUES = {
     "unverified_lifecycle_start": "仅有生命周期时间，缺少独立的输出流起点",
+    "ambiguous_stream_activity": "流式活动证据的归属存在冲突",
     "unconfirmed_initial_span": "首项起止时间重合，完整生成起点未确认",
     "unconfirmed_tool_start": "首项为工具调用，完整生成起点未确认",
     "unsupported_token_scope": "token 口径不支持合并测速",
@@ -580,6 +581,7 @@ class Panel(QMainWindow):
         timing_labels = {
             "transport-log": tr("传输日志边界"),
             "stream-log": tr("诊断日志起点"),
+            "corroborated-item-event": tr("经流式活动验证的生命周期起点"),
             "item-event": tr("输出事件起点"),
             "legacy": tr("旧版记录"),
             "synthetic": tr("合成边界"),

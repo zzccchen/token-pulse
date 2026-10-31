@@ -29,6 +29,8 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
+Unreleased source adds an independent streaming-activity adapter: exact desktop notifications can verify a retained first-item lifecycle start after diagnostic rotation. It preserves original timing and requires explicit local-host, turn and item ownership. History coverage and restart checks remain release gates; this does not promise recovery of every missing record.
+
 Version 0.1.9 keeps the history database, journals and instance lock in one physical directory, with verified migration and interrupted-installation recovery. It includes the 0.1.8 preview fixes: correctly classify input records, recover intact surviving diagnostic origins, and preserve validated origin/retry evidence across rotation and restart. It also protects saved measurements from repeated legacy withdrawal notices after upgrades. Historical thread snapshots remain separate from requests and actual tiers. Overwritten stream-origin evidence cannot be reconstructed; coverage recovery is verified separately from outlier removal. See the [measurement rules](docs/measurement.md).
 
 **Windows:** download an available portable ZIP from [Releases](https://github.com/zzccchen/token-pulse/releases), extract it, and open `TokenPulse.exe`. Keep the `_internal` folder beside the EXE. Python is included. The build is unsigned; licenses, library sources, and replacement instructions are included in the ZIP. Source changes and unpublished local previews may be newer than the latest public binary.

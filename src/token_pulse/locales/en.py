@@ -403,4 +403,6 @@ MESSAGES = {
         "Close other instances and check the backup, "
         "or select an explicit directory with --data-dir."
     ),
+    "经流式活动验证的生命周期起点": "Lifecycle start verified by streaming activity",
+    "流式活动证据的归属存在冲突": "Conflicting ownership of streaming activity evidence",
 }

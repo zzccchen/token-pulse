@@ -11,6 +11,45 @@ from token_pulse.logs import LogEvidence, Start
 NOW = 1788789600
 
 
+def test_late_evidence_revisits_live_history_beyond_the_response_cache(tmp_path):
+    path = tmp_path / "long.jsonl"
+    proof = source(path, "task", count=400)
+    logs, recovery = LogEvidence(), Backfill()
+    recovery.add("task", path, Context(), live=True, evidence=logs)
+    first, _ = recovery.poll(logs, NOW)
+    assert len(first) == 400 and all(s.tps is None for s in first)
+    # A new output does not force a full reread of already checked live history.
+    recovery.evidence_changed("task", NOW)
+    recovery.add("task", path, Context(), live=True, evidence=logs)
+    assert not recovery.pending
+    # Evidence for the old prefix must reach all 400 records, not just a live ring.
+    logs.starts.update(proof.starts)
+    recovery.evidence_changed("task", NOW - 10000)
+    recovery.add("task", path, Context(), live=True, evidence=logs)
+    second, _ = recovery.poll(logs, NOW)
+    assert len(second) == 400 and all(s.tps == 100 for s in second)
+    recovery.evidence_changed("different-task", NOW - 10000)
+    recovery.add("task", path, Context(), live=True, evidence=logs)
+    assert not recovery.pending
+
+
+@pytest.mark.parametrize("at,complete", [(NOW - 10000, False), (NOW, True)])
+def test_evidence_arriving_mid_scan_cannot_acknowledge_an_old_checkpoint(tmp_path, at, complete):
+    path = tmp_path / "long.jsonl"
+    logs = source(path, "task", count=400)
+    recovery = Backfill(budget=1024)
+    recovery.checkpoint_key = lambda task, path: task
+    recovery.add("task", path, Context(), live=True, evidence=logs)
+    recovery.poll(logs, NOW)
+    assert recovery.active
+    recovery.evidence_changed("task", at)
+    while recovery.pending:
+        recovery.poll(logs, NOW)
+    assert bool(recovery.done) == bool(recovery.completed) == complete
+    recovery.add("task", path, Context(), live=True, evidence=logs)
+    assert bool(recovery.pending) != complete
+
+
 def record(kind, payload, at):
     return (
         json.dumps(

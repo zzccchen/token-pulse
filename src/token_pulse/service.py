@@ -67,6 +67,9 @@ class Monitor:
                         historical = tuple(candidate.read())
                         collector.backfill.checkpoints = candidate.source_checkpoints()
                         collector.backfill.checkpoint_key = candidate.source_key
+                        if hasattr(collector, "desktop_logs"):
+                            collector.desktop_logs.checkpoints = candidate.source_checkpoints()
+                            collector.desktop_logs.checkpoint_key = candidate.source_key
                         collector.transport_checkpoints = candidate.transport_checkpoints()
                         collector.transport_key = partial(candidate.source_key, "transport")
                         collector.transport_digest = partial(
@@ -131,6 +134,16 @@ class Monitor:
                             collector.transport_completed, now=snapshot.at
                         )
                         collector.transport_completed.clear()
+                    if (
+                        getattr(collector, "desktop_logs", None)
+                        and collector.desktop_logs.completed
+                    ):
+                        history.save_checkpoints(collector.desktop_logs.completed, now=snapshot.at)
+                        collector.desktop_logs.checkpoints.update(
+                            (key, value[0])
+                            for key, value in collector.desktop_logs.completed.items()
+                        )
+                        collector.desktop_logs.completed.clear()
                     pending.clear()
                     rejected.clear()
                 except Exception:
@@ -160,7 +173,9 @@ class Monitor:
                 # idle/live polling returns to the normal low-frequency interval.
                 self.stopped.wait(
                     min(self.interval, 0.25)
-                    if snapshot.backfill_pending or snapshot.transport_pending
+                    if snapshot.backfill_pending
+                    or snapshot.transport_pending
+                    or snapshot.activity_pending
                     else self.interval
                 )
         finally:

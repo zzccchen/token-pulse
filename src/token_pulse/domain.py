@@ -241,6 +241,7 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         "cross_source_conflict",
         "ambiguous_response_identity",
         "interrupted_response",
+        "ambiguous_stream_activity",
     }
     reliable_usage_issues = {
         None,
@@ -267,7 +268,13 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         and incoming.parser_revision >= previous.parser_revision
     )
     revised_measurement = (
-        incoming.parser_revision > previous.parser_revision and incoming.exclusion is None
+        incoming.parser_revision > previous.parser_revision
+        and incoming.exclusion is None
+        and not (
+            incoming.timing_source == "corroborated-item-event"
+            and previous.exclusion is None
+            and previous.timing_source in {"stream-log", "recovered-stream-log", "transport-log"}
+        )
     )
     withdrawals = {
         "unverified_lifecycle_start",
@@ -304,7 +311,8 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         previous.issue == "unverified_lifecycle_start"
         and incoming.exclusion is None
         and incoming.parser_revision >= 7
-        and incoming.timing_source in {"stream-log", "recovered-stream-log", "transport-log"}
+        and incoming.timing_source
+        in {"stream-log", "recovered-stream-log", "transport-log", "corroborated-item-event"}
         and incoming.output_tokens == previous.output_tokens
         and incoming.token_scope == previous.token_scope
     )
@@ -327,6 +335,11 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     if token_conflict:
         base = replace(base, issue="cross_source_conflict")
     for observation in (previous, incoming):
+        if (
+            observation.issue == "ambiguous_stream_activity"
+            and base.timing_source != "corroborated-item-event"
+        ):
+            continue
         if (
             observation.issue == "interrupted_response"
             and base.timing_source == "transport-log"

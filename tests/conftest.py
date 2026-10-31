@@ -9,3 +9,9 @@ def deterministic_language():
     i18n.set_language("zh_CN")
     yield
     i18n.set_language("zh_CN")
+
+
+@pytest.fixture(autouse=True)
+def isolated_desktop_discovery(monkeypatch):
+    """Offline fixtures must never consume the host's desktop log directory."""
+    monkeypatch.setattr("token_pulse.collector.desktop_log_root", lambda: None)

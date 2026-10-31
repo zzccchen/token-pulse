@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
+from token_pulse.activity_archive import ActivityArchive
 from token_pulse.logs import LogEvidence, Start, merge_start
 
 # Bump if diagnostic origin/retry interpretation changes. Samples have separate revisions.
@@ -47,6 +48,9 @@ class EvidenceArchive:
                 revision INTEGER PRIMARY KEY, at REAL NOT NULL
             );
         """)
+        self.activity_archive = ActivityArchive(
+            self.db, self.anon, self.scope, retention_days=retention_days, capacity=capacity
+        )
 
     def restore(self, evidence: LogEvidence, *, now: float) -> None:
         evidence.archive_identity = self.anon
@@ -84,8 +88,10 @@ class EvidenceArchive:
             retries.setdefault((task, turn), []).append(at)
         evidence.archived_starts = starts
         evidence.archived_interruptions = {key: sorted(times) for key, times in retries.items()}
+        self.activity_archive.restore(evidence, now=now)
 
     def save(self, evidence: LogEvidence, *, now: float) -> None:
+        self.activity_archive.save(evidence, now=now)
         starts = []
         retries = []
         oldest = now - self.retention_days * 86400

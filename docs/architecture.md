@@ -24,6 +24,7 @@ All paths below are relative to `src/token_pulse/`.
 | `collector.py` | Source discovery, path containment, live polling and task state |
 | `logs.py`, `submissions.py` | Read-only diagnostics and bounded outer submission parsing |
 | `sqlite_recovery.py`, `evidence_archive.py` | Structural recovery of intact diagnostic records and bounded HMAC-only origin/retry persistence |
+| `desktop_logs.py`, `stream_activity.py`, `activity_archive.py` | Incremental desktop notifications, explicit host association and HMAC-only streaming activity corroboration |
 | `thread_settings.py` | Bounded thread-owned snapshot history, turn-start chronology and association validation |
 | `transport.py`, `transport_logs.py` | Responses sequence validation, bounded SQLite transport recovery and safe cursors |
 | `rollout.py` | Event normalization, usage/timing association, fork and replay detection |

@@ -14,7 +14,7 @@ from token_pulse.tailer import AmbiguousObject
 from token_pulse.thread_settings import ThreadSettings
 
 REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
-PARSER_REVISION = 9
+PARSER_REVISION = 10
 # This shadow only withdraws revision-1 split-usage records. An unrelated parser
 # upgrade must not make the same legacy observation override newer saved proof.
 LEGACY_WITHDRAWAL_REVISION = 2
@@ -617,6 +617,17 @@ class Rollout:
                 continue
             first_timing = timings[0]
             first_start = starts[0]
+            activity = evidence.activity(self.task_id, response.turn_id, response.items[0][0])
+            corroborated = (
+                first_start is None
+                and response.first_kind == "reasoning"
+                and first_timing is not None
+                and not first_timing.ambiguous
+                and first_timing.turn_id == response.turn_id
+                and activity is not None
+                and not activity.ambiguous
+                and any(first_timing.start < at < first_timing.end for at in activity.times)
+            )
             coincident_start = (
                 first_timing is not None
                 and not first_timing.ambiguous
@@ -649,14 +660,17 @@ class Rollout:
                 # Core may synthesize both lifecycle events while handling an
                 # already completed item. Positive elapsed time includes local
                 # processing and cannot prove a streaming origin at any speed.
-                issue = issue or (
-                    "missing_stream_start"
-                    if first_timing.start == first_timing.end
-                    else "unverified_lifecycle_start"
-                )
+                if not corroborated:
+                    issue = issue or (
+                        "ambiguous_stream_activity"
+                        if activity is not None and activity.ambiguous
+                        else "missing_stream_start"
+                        if first_timing.start == first_timing.end
+                        else "unverified_lifecycle_start"
+                    )
                 if first_timing.start != first_timing.end:
                     start_at = first_timing.start  # Retain the unverified observation for audit.
-                timing_source = "item-event"
+                timing_source = "corroborated-item-event" if corroborated else "item-event"
             else:
                 start_at = first_start.at
                 timing_source = first_start.origin
@@ -675,6 +689,18 @@ class Rollout:
                         auth_mode=first_start.auth_mode,
                         requested_tier=first_start.requested_tier,
                     )
+            if corroborated and (
+                any(
+                    start is not None and (start.at < start_at - 0.001 or start.at > end + 0.001)
+                    for start, (_, end) in zip(starts, response.items, strict=True)
+                )
+                or any(
+                    timing is not None
+                    and (timing.start < start_at - 0.001 or timing.end > end + 0.001)
+                    for timing, (_, end) in zip(timings, response.items, strict=True)
+                )
+            ):
+                issue = issue or "invalid_duration"
             end = max(
                 timing.end if timing is not None and not timing.ambiguous else end
                 for timing, (_, end) in zip(timings, response.items, strict=True)

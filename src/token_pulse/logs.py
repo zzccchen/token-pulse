@@ -12,6 +12,7 @@ from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from token_pulse.stream_activity import Activity, merge_activity
 from token_pulse.submissions import (
     _TRACE_SPAN,
     ConfigurationTag,
@@ -161,6 +162,51 @@ class LogEvidence:
         self.archived_starts: dict[str, dict[str, Start]] = {}
         self.archived_interruptions: dict[tuple[str, str], list[float]] = {}
         self.archive_floor: float | None = None
+        self.activities: OrderedDict[tuple[str, str, str], Activity] = OrderedDict()
+        self.archived_activities: dict[str, dict[tuple[str, str], Activity]] = {}
+        self.activity_changes: OrderedDict[str, float] = OrderedDict()
+
+    def record_activity(self, task: str, turn: str, item: str, activity: Activity) -> None:
+        if not activity.times:
+            return
+        known = self.activity(task, turn, item)
+        if known is None or merge_activity(known, activity) != known:
+            self.activity_changes[task] = min(
+                self.activity_changes.get(task, float("inf")), *activity.times
+            )
+            while len(self.activity_changes) > self.capacity:
+                self.activity_changes.popitem(last=False)
+        key = task, turn, item
+        previous = self.activities.get(key)
+        self.activities[key] = merge_activity(previous, activity) if previous else activity
+        self.activities.move_to_end(key)
+        while len(self.activities) > self.capacity:
+            self.activities.popitem(last=False)
+
+    def activity(self, task: str, turn: str, item: str) -> Activity | None:
+        live = self.activities.get((task, turn, item))
+        anon = self.archive_identity
+        saved = (
+            self.archived_activities.get(anon("task", task), {}).get(
+                (anon("turn", turn), anon("item", item))
+            )
+            if anon
+            else None
+        )
+        value = merge_activity(saved, live) if saved and live else saved or live
+        if value and self.archive_floor is not None:
+            value = replace(value, times=tuple(t for t in value.times if t > self.archive_floor))
+        return value
+
+    def activity_fingerprint(self, task: str) -> list[tuple]:
+        anon = self.archive_identity
+        values = dict(self.archived_activities.get(anon("task", task), {})) if anon else {}
+        for (owner, turn, item), activity in self.activities.items():
+            if owner != task:
+                continue
+            key = (anon("turn", turn), anon("item", item)) if anon else (turn, item)
+            values[key] = merge_activity(values[key], activity) if key in values else activity
+        return sorted((key, value.times, value.ambiguous) for key, value in values.items())
 
     def start(self, task: str, item: str, turn: str) -> Start | None:
         live = self.starts.get((task, item))

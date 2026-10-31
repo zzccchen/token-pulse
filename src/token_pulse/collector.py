@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from token_pulse.backfill import Backfill
+from token_pulse.desktop_logs import DesktopLogs, desktop_log_root
 from token_pulse.domain import Context, Sample, Task
 from token_pulse.logs import (
     LogEvidence,
@@ -83,6 +84,7 @@ class Snapshot:
     rejected_samples: tuple[Sample, ...] = ()
     backfill_reused: int = 0
     transport_pending: int = 0
+    activity_pending: int = 0
 
 
 class Collector:
@@ -90,6 +92,7 @@ class Collector:
         self.root = resolved_path(root)
         self.max_tasks = max_tasks
         self.evidence = LogEvidence()
+        self.desktop_logs = DesktopLogs(desktop_log_root(), self.evidence)
         self.logs: SqliteLogs | None = None
         self.watched: dict[str, tuple[JsonlTail, Rollout]] = {}
         self.next_discovery = 0.0
@@ -251,6 +254,10 @@ class Collector:
     def poll(self, now: float | None = None) -> Snapshot:
         now = time.time() if now is None else now
         issues: set[str] = set()
+        issues.update(self.desktop_logs.poll(now))
+        for task, at in self.evidence.activity_changes.items():
+            self.backfill.evidence_changed(task, at)
+        self.evidence.activity_changes.clear()
         if now >= self.next_discovery:
             try:
                 self._discover(now)
@@ -323,4 +330,5 @@ class Collector:
             tuple(rejected),
             self.backfill.reused,
             sum(reader.pending for reader in self.transport_readers.values()),
+            self.desktop_logs.pending,
         )
