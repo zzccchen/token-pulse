@@ -373,7 +373,43 @@ def test_stale_usage_does_not_split_the_next_response_or_reuse_old_tokens():
     rejected = [s for s in samples if s.issue in REJECTIONS]
     assert len(rejected) == 2  # The old parser split this response into two bad scopes.
     assert all(s.issue == "stale_usage_snapshot" for s in rejected)
+    assert all(s.parser_revision == 2 for s in rejected)
     assert not {s.key for s in rejected} & {s.key for s in observed}
+
+
+def test_parser_upgrade_cannot_promote_old_shadow_withdrawal_over_saved_proof(
+    tmp_path, monkeypatch
+):
+    from token_pulse.history import History
+    from token_pulse.rollout import Response
+
+    parser = ready()
+    output(parser)
+    usage(parser)
+    valid = parser.samples(evidence())[0]
+    # Re-reading a stale snapshot emits the same old shadow. Source loss means
+    # the current run need not be able to reproduce the previously saved start.
+    parser.responses.clear()
+    parser.corrections.append(
+        Response(
+            "turn",
+            "response",
+            valid.ended_at,
+            100,
+            (("item", valid.ended_at),),
+            valid.context,
+            "stale_usage_snapshot",
+        )
+    )
+    monkeypatch.setattr("token_pulse.rollout.PARSER_REVISION", PARSER_REVISION + 1)
+    shadow = parser.samples(LogEvidence())[0]
+    assert shadow.parser_revision == 2
+    history = History(tmp_path / "history.sqlite")
+    history.append([valid], now=valid.ended_at)
+    original = history.read()
+    history.reject([shadow], now=valid.ended_at)
+    assert history.read() == original
+    history.close()
 
 
 @pytest.mark.parametrize(

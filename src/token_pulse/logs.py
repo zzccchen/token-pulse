@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import time
 from bisect import bisect_left, bisect_right, insort
 from collections import OrderedDict
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -119,6 +121,29 @@ class Start:
     auth_mode: str | None = None
     requested_tier: str | None = None
     ambiguous: bool = False
+    origin: str = "stream-log"
+
+
+def merge_start(previous: Start, incoming: Start) -> Start:
+    conflict = previous.ambiguous or incoming.ambiguous
+    conflict |= (previous.at, previous.turn_id) != (incoming.at, incoming.turn_id)
+    conflict |= any(
+        old is not None and new is not None and old != new
+        for old, new in (
+            (previous.auth_mode, incoming.auth_mode),
+            (previous.requested_tier, incoming.requested_tier),
+        )
+    )
+    return Start(
+        previous.at,
+        previous.turn_id,
+        previous.auth_mode or incoming.auth_mode,
+        previous.requested_tier or incoming.requested_tier,
+        ambiguous=conflict,
+        origin="stream-log"
+        if "stream-log" in {previous.origin, incoming.origin}
+        else previous.origin,
+    )
 
 
 class LogEvidence:
@@ -131,6 +156,52 @@ class LogEvidence:
         self.capacity = capacity
         self.interruptions: dict[tuple[str, str], list[float]] = {}
         self.interruption_order: OrderedDict[tuple[str, str, float], None] = OrderedDict()
+        # Loaded by the history owner. Only HMAC identifiers enter this archive.
+        self.archive_identity: Callable[[str, str], str] | None = None
+        self.archived_starts: dict[str, dict[str, Start]] = {}
+        self.archived_interruptions: dict[tuple[str, str], list[float]] = {}
+        self.archive_floor: float | None = None
+
+    def start(self, task: str, item: str, turn: str) -> Start | None:
+        live = self.starts.get((task, item))
+        if live and self.archive_floor is not None and live.at <= self.archive_floor:
+            live = replace(live, ambiguous=True)
+        if self.archive_identity is None:
+            return live
+        anon = self.archive_identity
+        saved = self.archived_starts.get(anon("task", task), {}).get(anon("item", item))
+        if saved is None:
+            return live
+        # Compare pseudonyms; never assign an unknown saved turn to the current one.
+        saved = replace(saved, turn_id=turn if saved.turn_id == anon("turn", turn) else "")
+        return merge_start(saved, live) if live is not None else saved
+
+    def start_fingerprint(self, task: str) -> list[tuple[str, Start]]:
+        anon = self.archive_identity
+        values = dict(self.archived_starts.get(anon("task", task), {})) if anon else {}
+        for (owner, item), start in self.starts.items():
+            if owner != task:
+                continue
+            if anon:
+                item = anon("item", item)
+                start = replace(start, turn_id=anon("turn", start.turn_id))
+            start = replace(start, at=float(start.at))
+            if self.archive_floor is not None and start.at <= self.archive_floor:
+                start = replace(start, ambiguous=True)
+            values[item] = merge_start(values[item], start) if item in values else start
+        return sorted(values.items())
+
+    def interruption_fingerprint(self, task: str) -> list[tuple[str, list[float]]]:
+        anon = self.archive_identity
+        values = {
+            turn: set(times)
+            for (owner, turn), times in self.archived_interruptions.items()
+            if anon and owner == anon("task", task)
+        }
+        for (owner, turn), times in self.interruptions.items():
+            if owner == task:
+                values.setdefault(anon("turn", turn) if anon else turn, set()).update(times)
+        return sorted((turn, sorted(float(at) for at in times)) for turn, times in values.items())
 
     def record_interruption(self, task: str, turn: str, at: float) -> None:
         key = task, turn, at
@@ -148,9 +219,18 @@ class LogEvidence:
     def interrupted(self, task: str, turn: str, start: float, end: float) -> bool:
         times = self.interruptions.get((task, turn), [])
         index = bisect_right(times, start)
-        return index < len(times) and times[index] < end
+        if index < len(times) and times[index] < end:
+            return True
+        if self.archive_identity is not None:
+            anon = self.archive_identity
+            times = self.archived_interruptions.get((anon("task", task), anon("turn", turn)), [])
+            index = bisect_right(times, start)
+            return index < len(times) and times[index] < end
+        return False
 
-    def accept(self, task: str, at: float, target: str, body: str) -> None:
+    def accept(
+        self, task: str, at: float, target: str, body: str, *, origin: str = "stream-log"
+    ) -> None:
         if not task or not body or len(body) > 16000:
             return
         if target in {"codex_core::session::handlers", "feedback_tags"}:
@@ -231,27 +311,10 @@ class LogEvidence:
                 key = task, item_id
                 request = self.requests.get((task, turn_id))
                 auth, tier = request[1:] if request and request[0] <= at else (None, None)
-                start = Start(at, turn_id, auth, tier)
+                start = Start(at, turn_id, auth, tier, origin=origin)
                 previous = self.starts.get(key)
                 if previous:
-                    conflict = previous.ambiguous or (previous.at, previous.turn_id) != (
-                        at,
-                        turn_id,
-                    )
-                    conflict |= any(
-                        old is not None and new is not None and old != new
-                        for old, new in [
-                            (previous.auth_mode, auth),
-                            (previous.requested_tier, tier),
-                        ]
-                    )
-                    start = Start(
-                        previous.at,
-                        previous.turn_id,
-                        previous.auth_mode or auth,
-                        previous.requested_tier or tier,
-                        ambiguous=conflict,
-                    )
+                    start = merge_start(previous, start)
                 self.starts[key] = start
                 self.starts.move_to_end(key)
                 while len(self.starts) > self.capacity:
@@ -290,6 +353,11 @@ class SqliteLogs:
                     self.evidence.config_tags.clear()
                     self.evidence.interruptions.clear()
                     self.evidence.interruption_order.clear()
+                    # Intact orphan cells can outlive SQL-level retention. This is
+                    # bounded and read only, once per reset, before live rows replay.
+                    from token_pulse.sqlite_recovery import recover_origins
+
+                    recover_origins(connection, self.evidence, now=time.time())
                     # Submission rows are sparse. The normal ID window can miss
                     # them even while they remain in the database. Backfill this
                     # one target separately, once per database reset, with a cap.

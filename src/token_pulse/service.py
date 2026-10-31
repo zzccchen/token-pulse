@@ -11,6 +11,7 @@ from pathlib import Path
 
 from token_pulse.collector import Collector, Snapshot
 from token_pulse.domain import Sample
+from token_pulse.evidence_archive import EvidenceArchive
 from token_pulse.history import History
 from token_pulse.stats import unique
 
@@ -52,6 +53,7 @@ class Monitor:
     def _run(self) -> None:
         collector = Collector(self.root)
         history = None
+        archive = None
         historical: tuple[Sample, ...] = ()
         pending: list[Sample] = []
         rejected: dict[tuple, Sample] = {}
@@ -70,10 +72,18 @@ class Monitor:
                         collector.transport_digest = partial(
                             candidate.anonymous_id, "transport-cursor"
                         )
+                        archive = EvidenceArchive(
+                            candidate.connection,
+                            candidate.anonymous_id,
+                            self.root,
+                            retention_days=candidate.retention_days,
+                        )
+                        archive.restore(collector.evidence, now=time.time())
                         history = candidate
                     except Exception:
                         if candidate is not None:
                             candidate.close()
+                        archive = None
                         history_error = True
                 try:
                     snapshot = collector.poll()
@@ -94,6 +104,8 @@ class Monitor:
                 try:
                     if history is None:
                         raise RuntimeError("History is unavailable")
+                    if archive is not None:
+                        archive.save(collector.evidence, now=snapshot.at)
                     history.reject(list(rejected.values()), now=snapshot.at)
                     history.append(pending, now=snapshot.at)
                     historical = tuple(
@@ -105,6 +117,7 @@ class Monitor:
                                 collector.evidence.config_tags,
                             ),
                             collector.evidence.interruptions,
+                            archived=collector.evidence.archived_interruptions,
                         )
                     )
                     if collector.backfill.completed:

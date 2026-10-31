@@ -274,6 +274,7 @@ class HistoryWindow(QMainWindow):
                     boundary = {
                         "transport-log": tr("传输日志边界"),
                         "stream-log": tr("诊断日志起点"),
+                        "recovered-stream-log": tr("从完整 SQLite 历史记录恢复的诊断起点"),
                         "item-event": tr("生命周期记录（流起点未确认）"),
                         "tool-item-notification": tr("仅有工具调用项通知，不是完整生成计时"),
                         "coincident-item-boundaries": tr(

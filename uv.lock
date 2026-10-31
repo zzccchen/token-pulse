@@ -273,7 +273,7 @@ wheels = [
 
 [[package]]
 name = "token-pulse"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "." }
 dependencies = [
     { name = "pyside6-essentials" },

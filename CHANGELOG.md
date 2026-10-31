@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-## 0.1.7 — Verified stream origins and historical thread configuration
+## 0.1.8 — Recover surviving origins and preserve validated history
+
+- Correct supported inter-agent inputs and system/developer tool definitions that previously excluded subsequent output. Require exact metadata adjacency and valid outer shapes; unknown items remain unsupported.
+- Recover intact diagnostic records from structurally validated SQLite freelist cells and linked freeblocks in bounded, consistent read-only snapshots. Preserve original timestamps and exact scopes; reject damaged or missing fields, overflow payloads and conflicting observations.
+- Archive normalized stream origins together with sampling retries using HMAC identities. Restore them before historical recovery, survive log rotation and process restart, retry failed writes, and retain interruption protection when pruning.
+- Keep legacy split-usage withdrawal notices at their own rule revision. Unrelated parser upgrades must not turn repeated old notices into authority to delete previously validated independent measurements. Provide a bounded repair script for matching TokenPulse backups; existing records and explicit inherited/superseded rejections are preserved.
+- Use parser revision 9 and recovery revision 13, preserve record identity and usage during revalidation, and label recovered diagnostic provenance in history. Add synthetic input, SQLite/WAL, source immutability, persistence, retry, revision and corruption regressions.
+- Treat fixed-identity coverage comparison and restart stability as acceptance checks. These repairs recover surviving evidence; they cannot reconstruct origins already overwritten before collection. The earlier 0.1.7 binary remains an unpublished preview.
+
+## 0.1.7 — Unpublished preview: stream origins and historical thread configuration
 
 - Recover thread-owned `thread_settings_applied` snapshots as separate historical evidence. Validate fork ownership, event order, turn-start boundaries and exact turn overrides; missing evidence keeps Other rather than inheriting a parent, goal, or current global setting.
 - Parse supported `TurnStartOptions.service_tier` overrides separately from persistent submitted settings. Only an explicit absence of an override can bind a compatible pre-turn snapshot for a labeled mode fallback; request and server-confirmed values remain independent.

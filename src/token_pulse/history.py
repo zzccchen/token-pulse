@@ -136,12 +136,24 @@ class History:
                 ).fetchone()
                 if previous:
                     validated = self._decode(previous[0])
-                    if validated.exclusion is None and validated.parser_revision >= max(
-                        2, sample.parser_revision
+                    if (
+                        type(validated.output_tokens) is int
+                        and validated.output_tokens >= 0
+                        and validated.issue
+                        not in {
+                            "incomplete_boundary",
+                            "missing_usage_baseline",
+                            "usage_counter_reset",
+                            "usage_scope_mismatch",
+                            "record_gap",
+                            "turn_mismatch",
+                        }
+                        and validated.parser_revision >= max(2, sample.parser_revision)
                     ):
                         # The legacy shadow can repeat a withdrawal on every restart.
-                        # A full, validated observation from this parser already resolved
-                        # that stale notification; only a newer parser may supersede it.
+                        # Validated usage already resolved that stale notification,
+                        # even when timing remains unavailable. Only a newer
+                        # withdrawal rule can supersede that observation.
                         self.rejection_cache[sample.key] = sample
                         continue
             for turn in {safe.turn_id, self.empty_turn}:
@@ -454,7 +466,11 @@ class History:
         return Sample(**value)
 
     def enrich_interruptions(
-        self, samples: list[Sample], interruptions: dict[tuple[str, str], list[float]]
+        self,
+        samples: list[Sample],
+        interruptions: dict[tuple[str, str], list[float]],
+        *,
+        archived: dict[tuple[str, str], list[float]] | None = None,
     ) -> list[Sample]:
         # Correct saved intervals even when their conversation is no longer in
         # the live response cache. Only exact task/turn and interior times match.
@@ -462,6 +478,8 @@ class History:
             (self.anonymous_id("task", task), self.anonymous_id("turn", turn)): times
             for (task, turn), times in interruptions.items()
         }
+        for key, times in (archived or {}).items():
+            indexed[key] = sorted(set((*indexed.get(key, []), *times)))
         result, changed = [], []
         for sample in samples:
             times = indexed.get((sample.task_id, sample.turn_id), [])

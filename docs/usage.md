@@ -55,16 +55,18 @@ The tray number uses the selected model and time window. It remains visible whil
 
 TokenPulse reads session JSONL, selected state/diagnostic SQLite tables, and the global service-tier setting in `config.toml`. It does not read credential files, change Codex settings, send model requests, or upload telemetry.
 
-History stores necessary statistical fields and locally keyed HMAC identifiers instead of raw task, turn, and response IDs. Completed-file records store HMAC identities and digests, not paths or parsing content. Titles can be read into memory but are not written to history or CSV. Preferences retain your selected source path. Exported evidence can reveal model/provider usage; review it before sharing. Pseudonymization is not a promise that usage patterns cannot identify you.
+History stores necessary statistical fields and locally keyed HMAC identifiers instead of raw task, turn, and response IDs. A separate bounded evidence archive stores normalized stream origins and retry timestamps with HMAC source/task/turn/item identities, so later recovery can survive diagnostic rotation. Optional recovery inspects intact deleted SQLite records in memory; raw snapshots and log bodies are never saved. Completed-file records store HMAC identities and digests, not paths or parsing content. Titles can be read into memory but are not written to history or CSV. Preferences retain your selected source path. Exported evidence can reveal model/provider usage; review it before sharing. Pseudonymization is not a promise that usage patterns cannot identify you.
 
 ## Troubleshooting
+
+If an earlier upgrade removed independently validated measurements through repeated legacy usage withdrawals, a matching TokenPulse history backup can restore them. Close TokenPulse and back up its current history first. Preview with `uv run python scripts/restore_history.py --backup <backup.sqlite> --history <history.sqlite>`; add `--apply` to restore eligible records. The tool requires the same identity salt and restores only absent, independently timed records with a legacy stale-usage rejection. It does not replace current records, resurrect inherited/superseded output, recover lifecycle-only rates, or read Codex credentials/log content. Preview works on a temporary copy. Without a matching backup, the deleted statistical record cannot be reconstructed by this tool.
 
 | Symptom | What to check |
 | --- | --- |
 | No sessions | Confirm the source directory and that a local session has produced output. Remote hosts are not collected. |
 | Model exists, but no TPS | Inspect the exclusion reason. Missing boundaries, unsupported formats, and tool-first outputs can prevent measurement. |
 | Incomplete older history | Wait for recovery. Deleted logs, index omissions, retention limits, or missing starts leave gaps. |
-| Unknown Fast / actual tier | Settings and requests are different evidence. Final server-confirmed tiers are not currently extracted. |
+| Unknown Fast / actual tier | Settings and requests are different evidence. Actual tier requires an explicit value in a validated transport completion; other records may remain unknown. |
 | No Linux tray | Try `--no-tray`; availability depends on the desktop and extensions. |
 | Qt fails to load on Linux | Check platform-plugin errors and [system libraries](compatibility.md). |
 

@@ -29,9 +29,9 @@
 
 ## 快速体验
 
-0.1.7 已加入历史线程快照及经过校验的回合关联，并自动纠正仅凭生命周期时间计算 TPS、可能产生极端值的问题。记录和 token 保留；缺少独立输出流起点证据时，历史可测速数量可能减少。规则见[测量说明](docs/measurement.md)。
+0.1.8 修复了输入记录被误当成输出的问题，可恢复仍完整保留的诊断起点，并在日志轮转和重启后保留已验证的起点及重试证据。升级时重复出现的旧撤回通知也不会再删除已验证的测量。历史线程快照仍与请求值、实际层级分开保存。已经覆盖的起点证据无法重建；覆盖率恢复与异常值消失分别验收。规则见[测量说明](docs/measurement.md)。
 
-**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases/tag/v0.1.7) 下载便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。
+**Windows：**从 [Releases](https://github.com/zzccchen/token-pulse/releases) 下载已发布的便携 ZIP，完整解压后打开 `TokenPulse.exe`。请保留 EXE 旁的 `_internal` 文件夹，无需另装 Python。构建未签名，压缩包已附许可证、依赖源码和替换说明。源码和未公开的本地预览版本可能领先于最新公开安装包。
 
 **从源码运行（Windows 或 Linux）：**需要 **Python 3.11+** 和 [uv](https://docs.astral.sh/uv/getting-started/installation/)：
 
@@ -71,7 +71,7 @@ uv run token-pulse --language zh_CN   # 本次运行使用中文
 
 ## 当前状态与边界
 
-项目处于 **0.1.7** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
+项目处于 **0.1.8** 早期阶段。原支持范围为 **Codex CLI 0.153.4–0.160.0**；较新的 0.162/0.163 alpha 会话格式已进行有限范围的本地检查。当前适配器支持新版反馈日志中的回合配置标签，与提交设置、请求值和服务端确认分别保存，并将 `ultrafast` 独立显示为 Ultra Fast。内部日志格式可能变化，具体验证范围见[兼容性说明](docs/compatibility.md#codex-versions)。
 
 | 环境 | 验证范围 |
 | --- | --- |

@@ -283,6 +283,9 @@ MESSAGES = {
         "Diagnostic logs unavailable; trying session output events for timing boundaries."
     ),
     "诊断日志起点": "Diagnostic log start",
+    "从完整 SQLite 历史记录恢复的诊断起点": (
+        "Diagnostic start recovered from an intact SQLite record"
+    ),
     "词脉 · 请求异常": "TokenPulse · Request error",
     "词脉已运行": "TokenPulse is already running",
     "词脉自己的数据目录": "TokenPulse data directory",

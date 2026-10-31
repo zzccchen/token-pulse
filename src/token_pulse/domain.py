@@ -304,7 +304,7 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
         previous.issue == "unverified_lifecycle_start"
         and incoming.exclusion is None
         and incoming.parser_revision >= 7
-        and incoming.timing_source in {"stream-log", "transport-log"}
+        and incoming.timing_source in {"stream-log", "recovered-stream-log", "transport-log"}
         and incoming.output_tokens == previous.output_tokens
         and incoming.token_scope == previous.token_scope
     )

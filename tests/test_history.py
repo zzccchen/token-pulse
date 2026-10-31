@@ -127,6 +127,18 @@ def test_parser_revision_can_correct_old_rate_without_losing_it_to_missing_logs(
     history.close()
 
 
+@pytest.mark.parametrize("issue", ["unverified_lifecycle_start", "unconfirmed_tool_start"])
+def test_old_shadow_does_not_delete_validated_usage_with_missing_timing(tmp_path, issue):
+    history = History(tmp_path / "history.sqlite")
+    value = replace(sample(), issue=issue, parser_revision=8)
+    history.append([value], now=110)
+    before = history.read()
+    history.reject([replace(value, issue="stale_usage_snapshot", parser_revision=2)], now=111)
+    assert history.read() == before
+    assert before[0].output_tokens == 100 and before[0].tps is None
+    history.close()
+
+
 def test_revised_timing_preserves_previously_confirmed_request_metadata(tmp_path):
     history = History(tmp_path / "history.sqlite")
     old = replace(sample(), context=Context(auth_mode="Chatgpt", requested_tier="priority"))

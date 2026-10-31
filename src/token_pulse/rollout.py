@@ -14,7 +14,10 @@ from token_pulse.tailer import AmbiguousObject
 from token_pulse.thread_settings import ThreadSettings
 
 REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
-PARSER_REVISION = 8
+PARSER_REVISION = 9
+# This shadow only withdraws revision-1 split-usage records. An unrelated parser
+# upgrade must not make the same legacy observation override newer saved proof.
+LEGACY_WITHDRAWAL_REVISION = 2
 GENERATED = {"reasoning", "function_call", "custom_tool_call"}
 TOOL_RESULTS = {"function_call_output", "custom_tool_call_output", "tool_search_output"}
 
@@ -101,8 +104,10 @@ class Rollout:
         self.ordinal_inherited = False
         self.history_ordinal_missing = False
         self.thread_settings = ThreadSettings(task_id)
+        self.communication_input: tuple[float, int | None] | None = None
 
     def damage(self, reason: str) -> None:
+        self.communication_input = None
         if reason in {"invalid_record", "out_of_order", "record_gap", "incomplete_boundary"}:
             self.thread_settings.gap()
         if not self.damaged:
@@ -110,6 +115,7 @@ class Rollout:
         self.damaged = True
 
     def reset(self, *, legacy: bool = True) -> None:
+        self.communication_input = None
         self.thread_settings.reset()
         self.items.clear()
         self.has_output = False
@@ -222,6 +228,8 @@ class Rollout:
         )
 
     def _feed(self, record: dict) -> None:
+        communication_input = self.communication_input
+        self.communication_input = None
         value = record.get("payload")
         at = timestamp(record.get("timestamp"))
         if not isinstance(value, dict) or at is None:
@@ -235,6 +243,16 @@ class Rollout:
         metadata_ambiguous = isinstance(record, AmbiguousObject) or at < self.updated_at
         if at < self.updated_at - 0.001:
             self.damage("out_of_order")
+        if kind == "inter_agent_communication_metadata":
+            ordinal = record.get("ordinal")
+            if (
+                not metadata_ambiguous
+                and not isinstance(value, AmbiguousObject)
+                and type(value.get("trigger_turn")) is bool
+                and (ordinal is None or type(ordinal) is int and ordinal >= 0)
+            ):
+                self.communication_input = at, ordinal
+            return
         if kind == "session_meta":
             owner = value.get("id")
             if isinstance(owner, str):
@@ -335,6 +353,7 @@ class Rollout:
                 "system",
                 "developer",
             }
+            known_input |= self._input_item(record, at, communication_input)
             if not output and not known_input and event not in TOOL_RESULTS:
                 # Unknown generated items may include tool execution or otherwise
                 # unobserved output. Never measure only the recognized suffix.
@@ -384,7 +403,52 @@ class Rollout:
             self.item_timings.clear()
             self.damage("too_many_items")
 
+    @staticmethod
+    def _input_item(record: dict, at: float, communication: tuple | None) -> bool:
+        """Recognize outer input metadata without interpreting message/tool content."""
+        value = record["payload"]
+        if isinstance(record, AmbiguousObject) or isinstance(value, AmbiguousObject):
+            return False
+        if value.get("type") == "additional_tools":
+            return value.get("role") in {"system", "developer"} and isinstance(
+                value.get("tools"), list
+            )
+        if value.get("type") != "agent_message" or communication is None:
+            return False
+        previous_at, previous_ordinal = communication
+        ordinal = record.get("ordinal")
+        adjacent = (
+            ordinal is None
+            and previous_ordinal is None
+            or type(ordinal) is int
+            and type(previous_ordinal) is int
+            and ordinal == previous_ordinal + 1
+        )
+        content = value.get("content")
+        return (
+            at >= previous_at
+            and adjacent
+            and all(
+                isinstance(value.get(key), str) and 0 < len(value[key]) <= 160
+                for key in ("author", "recipient")
+            )
+            and isinstance(content, list)
+            and bool(content)
+            and all(
+                isinstance(part, dict)
+                and not isinstance(part, AmbiguousObject)
+                and (
+                    part.get("type") == "input_text"
+                    and isinstance(part.get("text"), str)
+                    or part.get("type") == "encrypted_content"
+                    and isinstance(part.get("encrypted_content"), str)
+                )
+                for part in content
+            )
+        )
+
     def _turn(self, turn_id: str, at: float) -> None:
+        self.communication_input = None
         if turn_id != self.turn_id:
             self.items.clear()
             self.has_output = False
@@ -518,7 +582,14 @@ class Rollout:
     def samples(self, evidence: LogEvidence) -> list[Sample]:
         samples = []
         for response in (*self.responses, *self.corrections):
-            starts = [evidence.starts.get((self.task_id, item)) for item, _ in response.items]
+            revision = (
+                LEGACY_WITHDRAWAL_REVISION
+                if response.issue == "stale_usage_snapshot"
+                else PARSER_REVISION
+            )
+            starts = [
+                evidence.start(self.task_id, item, response.turn_id) for item, _ in response.items
+            ]
             issue = response.issue or response.usage_issue
             tool_first = response.first_kind in {"function_call", "custom_tool_call"}
             if tool_first:
@@ -540,7 +611,7 @@ class Rollout:
                         response.tokens,
                         context=self._submitted(context, response.turn_id, response.at, evidence),
                         issue=issue or "missing_output_items",
-                        parser_revision=PARSER_REVISION,
+                        parser_revision=revision,
                     )
                 )
                 continue
@@ -588,7 +659,7 @@ class Rollout:
                 timing_source = "item-event"
             else:
                 start_at = first_start.at
-                timing_source = "stream-log"
+                timing_source = first_start.origin
                 if any(
                     start is not None and (start.at < start_at - 0.001 or start.at > end + 0.001)
                     for start, (_, end) in zip(starts, response.items, strict=True)
@@ -633,7 +704,7 @@ class Rollout:
                     start_at,
                     context,
                     issue=issue,
-                    parser_revision=PARSER_REVISION,
+                    parser_revision=revision,
                     timing_source=timing_source,
                     response_aliases=(
                         hashlib.sha256(

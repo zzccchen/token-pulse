@@ -25,7 +25,7 @@ class Source:
 
 
 # Bump when rollout interpretation changes so unchanged files are re-evaluated.
-RECOVERY_REVISION = 12
+RECOVERY_REVISION = 13
 
 
 def fingerprint(source: Source, evidence: LogEvidence) -> str:
@@ -34,11 +34,7 @@ def fingerprint(source: Source, evidence: LogEvidence) -> str:
         source.version,
         source.identity,
         asdict(source.context),
-        sorted(
-            (item, asdict(start))
-            for (task, item), start in evidence.starts.items()
-            if task == source.task
-        ),
+        sorted((item, asdict(start)) for item, start in evidence.start_fingerprint(source.task)),
         sorted(
             (turn, asdict(setting))
             for (task, turn), setting in evidence.submissions.items()
@@ -49,11 +45,7 @@ def fingerprint(source: Source, evidence: LogEvidence) -> str:
             for (task, turn), tag in evidence.config_tags.items()
             if task == source.task
         ),
-        sorted(
-            (turn, times)
-            for (task, turn), times in evidence.interruptions.items()
-            if task == source.task
-        ),
+        evidence.interruption_fingerprint(source.task),
     )
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
