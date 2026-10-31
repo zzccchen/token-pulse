@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-## 0.1.8 — Recover surviving origins and preserve validated history
+## 0.1.9 — Keep history and journals in one physical directory
+
+- Resolve the actual writable destination from an opened handle before taking the instance lock. Reject split main/journal layouts before writable SQLite access; do not rely on package names or logical path strings.
+- Migrate redirected legacy storage through a verified SQLite snapshot, preserving identities, valid intervals, tokens, checkpoints and evidence. Retain the snapshot and retired journals, resume interrupted installation, and reject conflicting or changed sources without overwriting either history.
+- Add regressions for mismatched WAL corruption, committed-WAL recovery, migration interruption, restart, lock aliases, malformed markers and source changes. TPS validation and parser revisions are unchanged.
+- Include the coverage and thread-evidence fixes from the unpublished 0.1.7/0.1.8 previews. Lost source timestamps remain unavailable; outlier disappearance alone does not establish successful coverage recovery.
+
+## 0.1.8 — Unpublished preview: recover surviving origins and preserve validated history
 
 - Correct supported inter-agent inputs and system/developer tool definitions that previously excluded subsequent output. Require exact metadata adjacency and valid outer shapes; unknown items remain unsupported.
 - Recover intact diagnostic records from structurally validated SQLite freelist cells and linked freeblocks in bounded, consistent read-only snapshots. Preserve original timestamps and exact scopes; reject damaged or missing fields, overflow payloads and conflicting observations.

@@ -26,6 +26,7 @@ from token_pulse.domain import (
     resolve_response_alias,
 )
 from token_pulse.rollout import PARSER_REVISION
+from token_pulse.storage import database_path
 from token_pulse.submissions import ConfigurationTag, SubmittedTier
 
 
@@ -37,7 +38,7 @@ class History:
     """
 
     def __init__(self, path: Path, *, retention_days: int = 30, max_samples: int = 10000):
-        self.path = path
+        self.path = path = database_path(path)
         self.retention_days, self.max_samples = retention_days, max_samples
         path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path, timeout=1)

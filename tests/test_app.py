@@ -5,6 +5,55 @@ import sys
 import pytest
 
 
+def test_redirected_aliases_lock_the_physical_directory_before_migration(tmp_path, monkeypatch):
+    from PySide6.QtCore import QLockFile
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    import token_pulse.app as module
+
+    app = QApplication.instance() or QApplication([])
+    physical = tmp_path / "physical"
+    physical.mkdir()
+    lock = QLockFile(str(physical / "instance.lock"))
+    assert lock.tryLock(0)
+    migrated = []
+    notices = []
+    monkeypatch.setattr(module, "writable_directory", lambda path: physical)
+    monkeypatch.setattr(module, "initialize_directory", lambda *args: migrated.append(args))
+    monkeypatch.setattr(QMessageBox, "information", lambda *args: notices.append(True))
+    try:
+        assert module.run(tmp_path / "alias", demo=True) == 1
+        assert module.run(physical, demo=True) == 1
+        assert notices == [True, True]
+        assert not migrated
+    finally:
+        lock.unlock()
+    assert app is not None
+
+
+def test_failed_migration_releases_lock_without_starting_collector(tmp_path, monkeypatch):
+    from PySide6.QtCore import QLockFile
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    import token_pulse.app as module
+    from token_pulse.storage import StorageError
+
+    app = QApplication.instance() or QApplication([])
+
+    def broken(*args):
+        raise StorageError("synthetic inconsistency")
+
+    notices = []
+    monkeypatch.setattr(module, "initialize_directory", broken)
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args: notices.append(True))
+    assert module.run(tmp_path, demo=True) == 1
+    assert notices == [True]
+    lock = QLockFile(str(tmp_path / "instance.lock"))
+    assert lock.tryLock(0)
+    lock.unlock()
+    assert app is not None
+
+
 def test_application_starts_and_exits_without_system_tray():
     result = subprocess.run(
         [sys.executable, "-m", "token_pulse", "--demo", "--no-tray", "--hidden", "--smoke-test"],

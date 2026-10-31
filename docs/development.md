@@ -67,3 +67,5 @@ Before publishing a version:
 4. Review tracked files, commit metadata, screenshots, and package contents for private data and credentials.
 5. Verify dependency notices for the actual artifacts being distributed. Source/wheel validation does not establish EXE distribution readiness.
 6. Publish only verified artifacts and describe remaining limitations accurately. A tag or release must not imply unsupported platform coverage.
+
+For storage changes, verify a fixed pre-migration snapshot against the destination by identities, tokens, valid intervals and all checkpoint/evidence tables. Check integrity after closing the migration writer and after restarting the actual packaged executable. Resolve opened main/WAL/SHM/lock handles to confirm co-location; matching path strings are insufficient under per-file filesystem redirection. Synthetic tests must cover committed WAL recovery, wrong-generation journals, interrupted installation, conflicting destinations and lock ownership. Keep local count-only receipts outside published artifacts.

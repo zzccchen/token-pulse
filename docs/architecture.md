@@ -29,6 +29,7 @@ All paths below are relative to `src/token_pulse/`.
 | `rollout.py` | Event normalization, usage/timing association, fork and replay detection |
 | `backfill.py` | Budgeted seven-day historical recovery independent of the live task limit |
 | `history.py` | Local HMAC identities, SQLite persistence, revisions, recovery records, CSV |
+| `storage.py` | Physical storage discovery, lock-scoped snapshot migration and journal isolation |
 | `stats.py`, `timeline.py` | Deduplication, model summaries and time-window selection |
 | `service.py` | Background ownership of collection/storage and snapshot publication |
 | `app.py`, `ui/` | Lifecycle, tray, settings, panel, history and chart |
@@ -37,6 +38,8 @@ All paths below are relative to `src/token_pulse/`.
 ## Boundaries and invariants
 
 The UI consumes snapshots and never parses raw logs or reads source databases. A background worker owns collection and history access. Live and stored observations share pseudonymized identities before merging.
+
+The application resolves its actual writable directory from an opened file handle before acquiring its instance lock. All history files and journals must share that physical directory. A redirected legacy history is snapshotted through its complete logical SQLite view under the lock, checked, and installed as a closed single file. Existing destination journals are retired beside the snapshot, never replayed onto it. A bounded migration marker contains HMAC directory/source fingerprints and a snapshot digest; interrupted installation resumes from that snapshot. Conflicting destinations or a changed legacy source require explicit selection, never a recency guess. These rules apply to TokenPulse storage only; Codex sources remain read-only.
 
 Source adapters interpret version-dependent internal formats. The normalized model retains unknown evidence rather than guessing it. Exact statistics and exclusion rules are defined in [measurement](measurement.md); source relationships and regression rationale are in [source evidence](source-audit.md).
 

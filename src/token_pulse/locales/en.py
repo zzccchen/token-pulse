@@ -397,4 +397,10 @@ MESSAGES = {
         "{tier}\nSnapshot observed: {stamp}\nSource: {source}\n{binding}\n"
         "Thread configuration does not establish request values or server execution tier."
     ),
+    "历史目录存在不一致或损坏，未覆盖现有记录。请关闭其他实例，"
+    "并检查备份或通过 --data-dir 选择明确的数据目录。": (
+        "History storage is inconsistent or damaged; existing records were not overwritten. "
+        "Close other instances and check the backup, "
+        "or select an explicit directory with --data-dir."
+    ),
 }

@@ -49,9 +49,13 @@ The tray number uses the selected model and time window. It remains visible whil
 | Data | Location or behavior |
 | --- | --- |
 | Codex source | `--codex-home`, saved source setting, or `CODEX_HOME` / `~/.codex` default |
-| Windows app data | `%LOCALAPPDATA%/TokenPulse` |
+| Windows app data | `%LOCALAPPDATA%/TokenPulse`, using the physical write destination selected by Windows |
 | Linux app data | `$XDG_DATA_HOME/token-pulse`, default `~/.local/share/token-pulse` |
 | Alternate app data | Set `--data-dir` |
+
+Windows can redirect individual AppData files. On startup, TokenPulse resolves the actual write destination and uses it for the database, journals, settings and instance lock. If an older database is outside that destination, it migrates a verified SQLite snapshot under the lock, retaining a `storage-backup-*` directory and a `storage-migration.json` marker there. The snapshot contains the same pseudonymized history, without conversation content; the marker contains digests rather than private directory paths. Ordinary, unredirected directories stay in place.
+
+Different launch contexts may select different physical destinations. Use the same explicit physical `--data-dir` when sharing history between them. Do not replace only `history.sqlite` while retaining another database's WAL/SHM files. For a manual restore, stop every writer and use a complete SQLite backup in a new, empty directory. Keep the old file set together for diagnosis. Downgrading to a version without storage migration support requires an explicit physical data directory; it must not reopen a stale logical copy. Migration refuses damaged sources or two independent destination histories rather than silently replacing either.
 
 TokenPulse reads session JSONL, selected state/diagnostic SQLite tables, and the global service-tier setting in `config.toml`. It does not read credential files, change Codex settings, send model requests, or upload telemetry.
 

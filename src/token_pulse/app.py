@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import time
 from dataclasses import replace
 from datetime import datetime
@@ -13,6 +14,7 @@ from token_pulse.demo import demo_snapshot
 from token_pulse.i18n import set_language, tr
 from token_pulse.preferences import Preferences, load, save
 from token_pulse.service import Monitor
+from token_pulse.storage import StorageError, initialize_directory, writable_directory
 from token_pulse.ui.history_window import HistoryWindow
 from token_pulse.ui.panel import Panel
 from token_pulse.ui.settings import Settings
@@ -277,8 +279,9 @@ def run(
     app.setOrganizationName("TokenPulse")
     app.setStyleSheet(STYLE)
     set_language(language or ("system" if demo else load(data_dir / "settings.json").language))
+    requested_directory = data_dir
     try:
-        data_dir.mkdir(parents=True, exist_ok=True)
+        data_dir = writable_directory(data_dir)
     except OSError:
         QMessageBox.critical(
             None, tr("无法启动词脉"), tr("数据目录不可写，请通过 --data-dir 指定可写目录。")
@@ -288,6 +291,19 @@ def run(
     lock.setStaleLockTime(0)
     if not lock.tryLock(0):
         QMessageBox.information(None, tr("词脉已运行"), tr("请从系统托盘打开现有窗口。"))
+        return 1
+    try:
+        initialize_directory(requested_directory, data_dir)
+    except (OSError, ValueError, StorageError, sqlite3.Error):
+        lock.unlock()
+        QMessageBox.critical(
+            None,
+            tr("无法启动词脉"),
+            tr(
+                "历史目录存在不一致或损坏，未覆盖现有记录。请关闭其他实例，"
+                "并检查备份或通过 --data-dir 选择明确的数据目录。"
+            ),
+        )
         return 1
     controller = Controller(
         app, data_dir, source=source, demo=demo, no_tray=no_tray, language=language
