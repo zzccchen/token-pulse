@@ -138,9 +138,9 @@ def test_recovery_runs_once_per_reader_reset(tmp_path, monkeypatch):
     monkeypatch.setattr("token_pulse.sqlite_recovery.recover_origins", recover)
     logs = LogEvidence()
     reader = SqliteLogs(path, logs)
-    assert reader.poll() is None
+    assert reader.poll(NOW) is None
     assert sample(logs).tps == 50
-    assert reader.poll() is None
+    assert reader.poll(NOW) is None
     assert len(calls) == 1
 
 

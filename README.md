@@ -17,6 +17,11 @@ English · [简体中文](README.zh-CN.md)
 
 *Synthetic demo data, not a model benchmark.*
 
+History and CSV cover the rolling last seven days, with no 10,000-record truncation. Recovery may read older session prefixes to validate recent output; older outputs are not retained.
+
+Source tools include an [isolated exclusion audit](docs/development.md#isolated-seven-day-rebuild) that can restore exactly matched saved measurements. An opt-in relaxed coverage audit also computes unverified lifecycle and observed response-cycle rates, preserving the fixed denominator and reporting each evidence tier separately. Version 0.1.10 also applies this policy during collection: reliable output rates use filled markers, inferred rates use hollow markers, and history/CSV retain the timing basis. Cycle rates can include waiting, tools and retries; the window mean and tray speed use reliable samples only.
+
+
 ## What you can see
 
 - **One view per model.** Combine conversations over 30 minutes, 1 day, or 7 days; inspect the weighted average, median, range, and sample count.
@@ -29,7 +34,7 @@ TokenPulse reads existing local data. It does not change Codex settings, send mo
 
 ## Try it
 
-Unreleased source adds an independent streaming-activity adapter: exact desktop notifications can verify a retained first-item lifecycle start after diagnostic rotation, including queued delivery with a matching completion. It preserves original timing and requires explicit local-host, turn and item ownership, retaining that context across validated desktop writer rotation. It also identifies compaction accounting and reads intact larger input and desktop records. History coverage and restart checks remain release gates; this does not promise recovery of every missing record.
+Version 0.1.10 includes an independent streaming-activity adapter: exact desktop notifications can verify a retained first-item lifecycle start after diagnostic rotation, including queued delivery with a matching completion. It preserves original timing and requires explicit local-host, turn and item ownership, retaining that context across validated desktop writer rotation. It also identifies compaction accounting and reads intact larger input and desktop records. History coverage and restart checks remain release gates; this does not promise recovery of every missing record.
 
 Version 0.1.9 keeps the history database, journals and instance lock in one physical directory, with verified migration and interrupted-installation recovery. It includes the 0.1.8 preview fixes: correctly classify input records, recover intact surviving diagnostic origins, and preserve validated origin/retry evidence across rotation and restart. It also protects saved measurements from repeated legacy withdrawal notices after upgrades. Historical thread snapshots remain separate from requests and actual tiers. Overwritten stream-origin evidence cannot be reconstructed; coverage recovery is verified separately from outlier removal. See the [measurement rules](docs/measurement.md).
 
@@ -73,7 +78,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.9** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
+TokenPulse is an early **0.1.10** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
 
 | Environment | Validation scope |
 | --- | --- |

@@ -9,6 +9,8 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING
 
+from token_pulse.retention import HISTORY_SECONDS
+
 if TYPE_CHECKING:
     from token_pulse.logs import LogEvidence
 
@@ -249,7 +251,7 @@ def _supported(row: tuple | None, now: float) -> bool:
     return bool(
         row is not None
         and row[4] in TARGETS
-        and now - 604800 <= row[1] <= now + 5
+        and now - HISTORY_SECONDS <= row[1] <= now + 5
         and 0 <= row[2] < 1e9
         and row[3] in {"TRACE", "DEBUG", "INFO", "WARN", "ERROR"}
         and row[9]

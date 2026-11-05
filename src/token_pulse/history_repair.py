@@ -8,9 +8,80 @@ from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
 
-from token_pulse.domain import resolve_response_alias
+from token_pulse.domain import reconcile, resolve_response_alias
 from token_pulse.history import History
 from token_pulse.logs import read_only
+
+
+def restore_independent(history: History, source: Path, *, now: float, apply: bool = False) -> int:
+    """Restore exact saved independent timing to lifecycle-only exclusions.
+
+    This never creates an output, guesses a boundary or relaxes timing semantics.
+    Identical identity, token scope/count and completion are required. Current
+    explicit exclusions, alias conflicts and known sampling retries still win.
+    """
+    existing = {s.key: s for s in history.read(now=now)}
+    tables = {
+        r[0]
+        for r in history.connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    retries: dict[tuple, list[float]] = {}
+    if "sampling_interruptions" in tables:
+        for task, turn, at in history.connection.execute(
+            "SELECT task,turn,at FROM sampling_interruptions"
+        ):
+            retries.setdefault((task, turn), []).append(at)
+    changes = []
+    with closing(read_only(source)) as backup:
+        backup.execute("BEGIN")
+        salt = backup.execute("SELECT value FROM settings WHERE key='salt'").fetchone()
+        if salt is None or salt[0] != history.salt.hex():
+            raise ValueError("Backup identity salt does not match destination")
+        for key, payload in backup.execute(
+            "SELECT key,payload FROM samples WHERE valid=1 AND ended_at BETWEEN ? AND ?",
+            (now - history.retention_days * 86400, now),
+        ):
+            saved = History._decode(payload)
+            current = existing.get(saved.key)
+            resolved = resolve_response_alias(saved, history.aliases)
+            if (
+                current is None
+                or current.issue != "unverified_lifecycle_start"
+                or saved.tps is None
+                or saved.parser_revision < 7
+                or saved.timing_source
+                not in {"stream-log", "recovered-stream-log", "transport-log"}
+                or key != "|".join(saved.key)
+                or not all(re.fullmatch(r"[0-9a-f]{24}", value) for value in saved.key)
+                or saved.turn_id == history.empty_turn
+                or key in history.rejections
+                or history.rejections.get(
+                    "|".join((saved.task_id, history.empty_turn, saved.response_id)), (None,)
+                )[0]
+                in {"inherited_history", "superseded_usage"}
+                or saved.output_tokens != current.output_tokens
+                or saved.token_scope != current.token_scope
+                or saved.ended_at != current.ended_at
+                or resolved.key != saved.key
+                or resolved.exclusion is not None
+            ):
+                continue
+            repaired = reconcile(saved, current)
+            if repaired.tps is None:
+                continue
+            if repaired.timing_source != "transport-log" and any(
+                repaired.started_at < at < repaired.ended_at
+                for at in retries.get((saved.task_id, saved.turn_id), ())
+            ):
+                continue
+            changes.append((json.dumps(asdict(repaired), allow_nan=False), key))
+    if apply:
+        with history.connection:
+            history.connection.executemany(
+                "UPDATE samples SET payload=?,valid=1 WHERE key=?", changes
+            )
+        history.cache.clear()
+    return len(changes)
 
 
 def restore_preserved(history: History, source: Path, *, now: float, apply: bool = False) -> int:
@@ -22,18 +93,14 @@ def restore_preserved(history: History, source: Path, *, now: float, apply: bool
     existing = {s.key for s in history.read()}
     candidates = []
     cutoff = now - history.retention_days * 86400
-    if len(existing) >= history.max_samples:
-        cutoff = max(
-            cutoff, history.connection.execute("SELECT min(ended_at) FROM samples").fetchone()[0]
-        )
     with closing(read_only(source)) as backup:
         salt = backup.execute("SELECT value FROM settings WHERE key='salt'").fetchone()
         if salt is None or salt[0] != history.salt.hex():
             raise ValueError("Backup identity salt does not match destination")
         for key, payload in backup.execute(
             "SELECT key,payload FROM samples WHERE valid=1 AND ended_at BETWEEN ? AND ? "
-            "ORDER BY ended_at DESC LIMIT ?",
-            (cutoff, now, history.max_samples),
+            "ORDER BY ended_at DESC",
+            (cutoff, now),
         ):
             sample = History._decode(payload)
             if (
@@ -85,11 +152,6 @@ def restore_preserved(history: History, source: Path, *, now: float, apply: bool
                             sample.ended_at,
                         ),
                     )
-        history.connection.execute(
-            "DELETE FROM samples WHERE key IN "
-            "(SELECT key FROM samples ORDER BY ended_at DESC LIMIT -1 OFFSET ?)",
-            (history.max_samples,),
-        )
     history.rejections = dict(
         (key, (reason, at))
         for key, reason, at in history.connection.execute("SELECT * FROM rejected_outputs")

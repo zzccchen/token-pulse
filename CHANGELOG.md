@@ -1,13 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.1.10 — Reliable and inferred output rates
 
+- Show reliable output rates as filled markers and inferred lifecycle/response-cycle rates as hollow markers for every mode. Retain evidence and exclusions in history/CSV; weighted output summaries use reliable samples only. Persist observed cycle boundaries through incremental collection, recovery and restart with parser revision 14 and recovery revision 19.
+
+- Add an opt-in fixed-population relaxed coverage audit with separate validated, lifecycle and response-cycle rate tiers. Preserve original sample rows and exclusions, export all records, and check a requested coverage target without inventing durations or mixing elapsed processing time into output TPS.
+
+- Recognize bounded `configuration_update` records as input controls instead of generated items, preserving independent timing for the following output. Use measurement/transport parser revision 13 and recovery revision 18.
+- Add a fixed-exclusion audit and isolated exact restoration of saved independent measurements. Preserve retry/withdrawal protections and export unverified lifecycle arithmetic separately from validated TPS.
+- Unify collection, stored history and evidence retention around the rolling last seven days. Remove the 10,000-record storage/read cap and count-based alias/withdrawal pruning; keep a separate bounded write cache. Pause collection on failed writes until the pending batch is durable. Recovery revision 17 rechecks earlier policy checkpoints.
+- Add a read-only-source, isolated seven-day rebuild command with aggregate coverage comparisons, optional archived evidence reuse, integrity and restart checks. Existing monitor databases are never rewritten by the audit.
 - Corroborate a retained first reasoning-item lifecycle start with independently logged streaming activity. Require exact identities and prior explicit local-host ownership in the same desktop file. Accept either an interior activity timestamp or an ordered activity/completion delivery pair for queued notifications; keep the original boundaries and reject gaps and conflicts.
 - Identify item-less compaction accounting using an explicit compaction response ID and matching owned usage snapshot. Preserve response identity, tokens, token scope and saved valid timing; persist/export response purpose separately and retain unresolved records in coverage.
 - Increase the bounded JSONL line limit from 8 to 16 MiB so intact large input/tool-result records do not poison following responses. Partial, damaged and larger unsupported lines still fail closed.
 - Add bounded incremental desktop collection and HMAC-only activity persistence, deduplicated evidence, conflict handling, partial-line recovery and restart-safe completion checks. Migrate existing activity evidence without loss. Preserve usage, identity and existing retry/fork validation; label the additional timing provenance.
 - Revisit previously scanned live history when late activity evidence concerns its older prefix. New output beyond that prefix does not trigger a whole-file reread, and evidence arriving mid-scan cannot acknowledge a stale completion check.
-- Use measurement/transport parser revision 11 and recovery revision 15. Preserve stronger saved intervals during activity enrichment and recheck cross-source conflicts. Historical coverage remains an acceptance gate separate from outlier removal and storage integrity. Reference-only coverage calculations remain separate from production statistics and do not establish accurate TPS.
+- Preserve stronger saved intervals during activity enrichment and recheck cross-source conflicts. Historical coverage remains an acceptance gate separate from outlier removal and storage integrity. Reference-only coverage calculations remain separate from production statistics and do not establish accurate TPS.
 
 ## 0.1.9 — Keep history and journals in one physical directory
 

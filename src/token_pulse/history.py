@@ -25,6 +25,7 @@ from token_pulse.domain import (
     reconcile,
     resolve_response_alias,
 )
+from token_pulse.retention import HISTORY_DAYS
 from token_pulse.rollout import PARSER_REVISION
 from token_pulse.storage import database_path
 from token_pulse.submissions import ConfigurationTag, SubmittedTier
@@ -37,9 +38,9 @@ class History:
     a missing source event alone must not erase an existing valid measurement.
     """
 
-    def __init__(self, path: Path, *, retention_days: int = 30, max_samples: int = 10000):
+    def __init__(self, path: Path, *, retention_days: int = HISTORY_DAYS, cache_size: int = 10000):
         self.path = path = database_path(path)
-        self.retention_days, self.max_samples = retention_days, max_samples
+        self.retention_days, self.cache_size = retention_days, cache_size
         path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path, timeout=1)
         self.connection.execute("PRAGMA journal_mode=WAL")
@@ -174,8 +175,8 @@ class History:
             self.connection.executemany("DELETE FROM samples WHERE key=?", [(r[0],) for r in rows])
         self.rejections.update((key, (reason, at)) for key, reason, at in rows)
         self.rejection_cache.update((s.key, s) for s in changed)
-        if len(self.rejection_cache) > self.max_samples:
-            self.rejection_cache = dict(list(self.rejection_cache.items())[-self.max_samples :])
+        if len(self.rejection_cache) > self.cache_size:
+            self.rejection_cache = dict(list(self.rejection_cache.items())[-self.cache_size :])
 
     def _index_turns(self) -> None:
         self.known_turns.clear()
@@ -200,9 +201,7 @@ class History:
         # Include history policy and source location without persisting either path or ID.
         if path.name.endswith(".jsonl.zst"):
             path = path.with_suffix("")
-        return self.anonymous_id(
-            "source", f"{self.retention_days}:{self.max_samples}:{path}:{task}"
-        )
+        return self.anonymous_id("source", f"{self.retention_days}:time-window-v1:{path}:{task}")
 
     def source_checkpoints(self) -> dict[str, str]:
         return dict(self.connection.execute("SELECT key, fingerprint FROM completed_sources"))
@@ -243,11 +242,6 @@ class History:
             self.connection.execute(
                 "DELETE FROM completed_sources WHERE checked_at < ?",
                 (now - self.retention_days * 86400,),
-            )
-            self.connection.execute(
-                "DELETE FROM completed_sources WHERE key IN "
-                "(SELECT key FROM completed_sources ORDER BY checked_at DESC LIMIT -1 OFFSET ?)",
-                (self.max_samples,),
             )
 
     def anonymous(self, sample: Sample, *, aliases: dict | None = None) -> Sample:
@@ -414,45 +408,30 @@ class History:
             # A staged legacy row must not be reinserted after its canonical row.
             self.connection.executemany("DELETE FROM samples WHERE key=?", superseded)
             self.connection.execute("DELETE FROM samples WHERE ended_at < ?", (cutoff,))
-            self.connection.execute(
-                "DELETE FROM samples WHERE key IN "
-                "(SELECT key FROM samples ORDER BY ended_at DESC LIMIT -1 OFFSET ?)",
-                (self.max_samples,),
-            )
             self.connection.execute("DELETE FROM rejected_outputs WHERE ended_at < ?", (cutoff,))
             self.connection.execute("DELETE FROM response_aliases WHERE ended_at < ?", (cutoff,))
-            self.connection.execute(
-                "DELETE FROM response_aliases WHERE rowid IN "
-                "(SELECT rowid FROM response_aliases ORDER BY ended_at DESC LIMIT -1 OFFSET ?)",
-                (self.max_samples * 2,),
-            )
-            self.connection.execute(
-                "DELETE FROM rejected_outputs WHERE key IN "
-                "(SELECT key FROM rejected_outputs ORDER BY ended_at DESC LIMIT -1 OFFSET ?)",
-                (self.max_samples * 2,),
-            )
         for (key,) in cleared_rejections:
             self.rejections.pop(key, None)
         self._index_aliases()
-        if len(self.rejections) > self.max_samples * 2 or any(
-            at < cutoff for _, at in self.rejections.values()
-        ):
+        if any(at < cutoff for _, at in self.rejections.values()):
             self.rejections = {
                 key: (reason, at)
                 for key, reason, at in self.connection.execute("SELECT * FROM rejected_outputs")
             }
         for sample in changed:
             self.cache[sample.key] = sample
-        if len(self.cache) > self.max_samples:
-            self.cache = dict(list(self.cache.items())[-self.max_samples :])
-        if len(self.known_turns) > self.max_samples:
-            self._index_turns()
+        self.cache = {key: value for key, value in self.cache.items() if value.ended_at >= cutoff}
+        if len(self.cache) > self.cache_size:
+            self.cache = dict(list(self.cache.items())[-self.cache_size :])
+        self._index_turns()
         return len(rows)
 
-    def read(self) -> list[Sample]:
+    def read(self, *, now: float | None = None) -> list[Sample]:
         result = []
+        condition = "" if now is None else " WHERE ended_at BETWEEN ? AND ?"
+        parameters = () if now is None else (now - self.retention_days * 86400, now)
         for (payload,) in self.connection.execute(
-            "SELECT payload FROM samples ORDER BY ended_at DESC LIMIT ?", (self.max_samples,)
+            f"SELECT payload FROM samples{condition} ORDER BY ended_at DESC", parameters
         ):
             result.append(self._decode(payload))
         return result
@@ -621,6 +600,13 @@ def export_csv(path: Path, samples: list[Sample]) -> None:
         "timing_source",
         "response_aliases",
         "evidence_sources",
+        "rate_basis",
+        "estimated_tokens_per_second",
+        "estimated_seconds",
+        "cycle_started_at",
+        "cycle_ended_at",
+        "cycle_anchor",
+        "cycle_revision",
     ]
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream)
@@ -641,5 +627,12 @@ def export_csv(path: Path, samples: list[Sample]) -> None:
                 sample.timing_source,
                 json.dumps(sample.response_aliases),
                 json.dumps(sample.evidence_sources),
+                sample.rate_estimate.basis if sample.rate_estimate else None,
+                sample.display_tps,
+                sample.display_seconds,
+                sample.cycle_started_at,
+                sample.cycle_ended_at,
+                sample.cycle_anchor,
+                sample.cycle_revision,
             ]
             writer.writerow([csv_cell(value) for value in values])

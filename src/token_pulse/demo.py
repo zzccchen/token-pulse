@@ -45,6 +45,7 @@ def demo_snapshot() -> Snapshot:
                 )
             ),
             source="synthetic-demo",
+            issue="unverified_lifecycle_start" if i % 4 == 1 else None,
         )
         for i, rate in enumerate(rates)
     )

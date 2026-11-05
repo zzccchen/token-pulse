@@ -10,6 +10,7 @@ from pathlib import Path
 
 from token_pulse.activity_archive import ActivityArchive
 from token_pulse.logs import LogEvidence, Start, merge_start
+from token_pulse.retention import HISTORY_DAYS
 
 # Bump if diagnostic origin/retry interpretation changes. Samples have separate revisions.
 EVIDENCE_REVISION = 1
@@ -22,7 +23,7 @@ class EvidenceArchive:
         anonymous_id: Callable[[str, str], str],
         root: Path,
         *,
-        retention_days: int = 30,
+        retention_days: int = HISTORY_DAYS,
         capacity: int = 100000,
     ):
         self.db, self.anon = connection, anonymous_id

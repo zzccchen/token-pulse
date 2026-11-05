@@ -13,6 +13,7 @@ from token_pulse.collector import Collector, Snapshot
 from token_pulse.domain import Sample
 from token_pulse.evidence_archive import EvidenceArchive
 from token_pulse.history import History
+from token_pulse.retention import HISTORY_SECONDS
 from token_pulse.stats import unique
 
 
@@ -57,6 +58,7 @@ class Monitor:
         historical: tuple[Sample, ...] = ()
         pending: list[Sample] = []
         rejected: dict[tuple, Sample] = {}
+        retry_snapshot = None
         try:
             while not self.stopped.is_set():
                 history_error = False
@@ -64,7 +66,8 @@ class Monitor:
                     candidate = None
                     try:
                         candidate = History(self.data_dir / "history.sqlite")
-                        historical = tuple(candidate.read())
+                        candidate.append([], now=time.time())
+                        historical = tuple(candidate.read(now=time.time()))
                         collector.backfill.checkpoints = candidate.source_checkpoints()
                         collector.backfill.checkpoint_key = candidate.source_key
                         if hasattr(collector, "desktop_logs"):
@@ -88,13 +91,17 @@ class Monitor:
                             candidate.close()
                         archive = None
                         history_error = True
-                try:
-                    snapshot = collector.poll()
-                except Exception:
-                    # Fail closed without putting raw source data or paths in UI diagnostics.
-                    snapshot = Snapshot(diagnostics=("monitor_error",), at=time.time())
-                limit = history.max_samples if history else 10000
-                pending = unique([*pending, *snapshot.samples])[-limit:]
+                if retry_snapshot is not None:
+                    snapshot = retry_snapshot
+                elif history is None:
+                    snapshot = Snapshot(at=time.time())
+                else:
+                    try:
+                        snapshot = collector.poll()
+                    except Exception:
+                        # Fail closed without exposing raw source data or paths.
+                        snapshot = Snapshot(diagnostics=("monitor_error",), at=time.time())
+                pending = unique([*pending, *snapshot.samples])
                 for sample in snapshot.rejected_samples:
                     previous = rejected.get(sample.key)
                     if previous is None or previous.issue not in {
@@ -102,8 +109,6 @@ class Monitor:
                         "superseded_usage",
                     }:
                         rejected[sample.key] = sample
-                if len(rejected) > 2 * limit:
-                    rejected = dict(list(rejected.items())[-2 * limit :])
                 try:
                     if history is None:
                         raise RuntimeError("History is unavailable")
@@ -115,7 +120,7 @@ class Monitor:
                         history.enrich_interruptions(
                             history.enrich_config_tags(
                                 history.enrich_submissions(
-                                    history.read(), collector.evidence.submissions
+                                    history.read(now=snapshot.at), collector.evidence.submissions
                                 ),
                                 collector.evidence.config_tags,
                             ),
@@ -146,8 +151,13 @@ class Monitor:
                         collector.desktop_logs.completed.clear()
                     pending.clear()
                     rejected.clear()
+                    retry_snapshot = None
                 except Exception:
                     history_error = True
+                    # Backpressure keeps one bounded collection batch until durable.
+                    # Never discard older pending outputs to make room for new ones.
+                    if history is not None:
+                        retry_snapshot = snapshot
                 if history_error:
                     snapshot = replace(
                         snapshot, diagnostics=(*snapshot.diagnostics, "history_unavailable")
@@ -164,6 +174,7 @@ class Monitor:
                                     history.anonymous(s)
                                     for s in [*pending, *snapshot.samples]
                                     if not history.is_rejected(s)
+                                    and snapshot.at - HISTORY_SECONDS <= s.ended_at <= snapshot.at
                                 ),
                             ]
                         )
@@ -173,9 +184,12 @@ class Monitor:
                 # idle/live polling returns to the normal low-frequency interval.
                 self.stopped.wait(
                     min(self.interval, 0.25)
-                    if snapshot.backfill_pending
-                    or snapshot.transport_pending
-                    or snapshot.activity_pending
+                    if not history_error
+                    and (
+                        snapshot.backfill_pending
+                        or snapshot.transport_pending
+                        or snapshot.activity_pending
+                    )
                     else self.interval
                 )
         finally:

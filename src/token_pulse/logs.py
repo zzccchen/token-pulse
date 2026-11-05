@@ -12,6 +12,7 @@ from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from token_pulse.retention import HISTORY_SECONDS
 from token_pulse.stream_activity import Activity, merge_activity
 from token_pulse.submissions import (
     _TRACE_SPAN,
@@ -390,8 +391,12 @@ class SqliteLogs:
         self.backfill, self.batch_size = backfill, batch_size
         self.cursor: int | None = None
         self.identity: tuple[int, int] | None = None
+        self.pending = False
 
-    def poll(self) -> str | None:
+    def poll(self, now: float | None = None) -> str | None:
+        now = time.time() if now is None else now
+        cutoff = now - HISTORY_SECONDS
+        self.pending = False
         try:
             stat = self.path.stat()
             identity = stat.st_dev, stat.st_ino
@@ -409,15 +414,15 @@ class SqliteLogs:
                     # bounded and read only, once per reset, before live rows replay.
                     from token_pulse.sqlite_recovery import recover_origins
 
-                    recover_origins(connection, self.evidence, now=time.time())
+                    recover_origins(connection, self.evidence, now=now)
                     # Submission rows are sparse. The normal ID window can miss
                     # them even while they remain in the database. Backfill this
                     # one target separately, once per database reset, with a cap.
                     submissions = connection.execute(
                         "SELECT ts, ts_nanos, thread_id, target, "
                         "CASE WHEN length(feedback_log_body) <= 16000 THEN feedback_log_body END "
-                        "FROM logs WHERE target=? ORDER BY id DESC LIMIT 2000",
-                        ("codex_core::session::handlers",),
+                        "FROM logs WHERE target=? AND ts>=? ORDER BY id DESC LIMIT 2000",
+                        ("codex_core::session::handlers", cutoff),
                     ).fetchall()
                     for row in reversed(submissions):
                         self._accept_row(*row)
@@ -429,9 +434,10 @@ class SqliteLogs:
                         "SELECT ts, ts_nanos, thread_id, target, "
                         "CASE WHEN length(feedback_log_body) <= 16000 THEN feedback_log_body END "
                         "FROM logs WHERE id IN (SELECT id FROM logs WHERE id <= ? "
-                        "AND target IN (?,?,?) ORDER BY id DESC LIMIT 40000) ORDER BY id",
+                        "AND ts>=? AND target IN (?,?,?) ORDER BY id DESC LIMIT 40000) ORDER BY id",
                         (
                             maximum,
+                            cutoff,
                             "feedback_tags",
                             "codex_core::stream_events_utils",
                             "codex_core::responses_retry",
@@ -443,12 +449,15 @@ class SqliteLogs:
                 rows = connection.execute(
                     "SELECT id, ts, ts_nanos, thread_id, target, "
                     "CASE WHEN length(feedback_log_body) <= 16000 THEN feedback_log_body END "
-                    "FROM logs WHERE id > ? ORDER BY id LIMIT ?",
-                    (self.cursor, self.batch_size),
+                    "FROM logs WHERE id > ? AND ts>=? ORDER BY id LIMIT ?",
+                    (self.cursor, cutoff, self.batch_size),
                 ).fetchall()
                 for row_id, seconds, nanos, task, target, body in rows:
                     self._accept_row(seconds, nanos, task, target, body)
                     self.cursor = row_id
+                self.pending = len(rows) == self.batch_size
+                if not self.pending:
+                    self.cursor = maximum
         except (OSError, sqlite3.Error, TypeError, ValueError):
             return "logs_unavailable"
         return None

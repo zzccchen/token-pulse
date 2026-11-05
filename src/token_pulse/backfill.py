@@ -11,6 +11,7 @@ from pathlib import Path
 
 from token_pulse.domain import Context, Sample
 from token_pulse.logs import LogEvidence
+from token_pulse.retention import HISTORY_SECONDS
 from token_pulse.rollout import Rollout
 from token_pulse.tailer import JsonlTail, open_tail
 
@@ -25,7 +26,7 @@ class Source:
 
 
 # Bump when rollout interpretation changes so unchanged files are re-evaluated.
-RECOVERY_REVISION = 16
+RECOVERY_REVISION = 19
 
 
 def fingerprint(source: Source, evidence: LogEvidence) -> str:
@@ -173,7 +174,9 @@ class Backfill:
 
             def drain(rollout: Rollout = rollout) -> None:
                 samples.extend(
-                    s for s in rollout.samples(evidence) if now - 604800 <= s.ended_at <= now
+                    s
+                    for s in rollout.samples(evidence)
+                    if now - HISTORY_SECONDS <= s.ended_at <= now
                 )
                 rollout.responses.clear()
                 rollout.corrections.clear()

@@ -105,6 +105,7 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
     one = Sample("task", "turn", "one", now - 2, 100, now - 12)
     two = Sample("task", "turn", "two", now - 1, 200, now - 11)
     checks = []
+    collectors = []
 
     class SyntheticCollector:
         def __init__(self, root):
@@ -112,6 +113,7 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
             self.backfill = Backfill()
             self.polls = 0
             self.transport_completed = {}
+            collectors.append(self)
 
         def poll(self):
             self.polls += 1
@@ -129,20 +131,24 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
 
     def append(self, samples, **kwargs):
         nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise OSError("synthetic temporary write failure")
+        if samples:
+            attempts += 1
+            if attempts <= 2:
+                assert collectors[0].polls == 1
+                raise OSError("synthetic temporary write failure")
         return original_append(self, samples, **kwargs)
 
     def save(self, values, **kwargs):
-        assert attempts >= 2
-        assert len(self.read()) == 2
+        assert attempts >= 3
+        assert collectors[0].polls == 1
+        assert len(self.read()) == 1
         checks.append(True)
         return original_save(self, values, **kwargs)
 
     def save_transport(self, values, **kwargs):
-        assert attempts >= 2
-        assert len(self.read()) == 2
+        assert attempts >= 3
+        assert collectors[0].polls == 1
+        assert len(self.read()) == 1
         transport_checks.append(True)
         return original_transport_save(self, values, **kwargs)
 
@@ -154,7 +160,7 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
     monitor.start()
     try:
         deadline = time.monotonic() + 5
-        while not transport_checks and time.monotonic() < deadline:
+        while (not transport_checks or collectors[0].polls < 2) and time.monotonic() < deadline:
             time.sleep(0.01)
         assert checks and transport_checks
     finally:
@@ -163,4 +169,57 @@ def test_failed_chunk_is_retried_before_completion_checkpoint_is_saved(tmp_path,
     assert len(history.read()) == 2
     assert history.source_checkpoints() == {"anonymous-source": "fingerprint"}
     assert history.transport_checkpoints() == {"anonymous-transport": (12, "anchor", "identity", 6)}
+    history.close()
+
+
+def test_large_pending_batch_is_retried_without_count_truncation(tmp_path, monkeypatch):
+    from token_pulse.collector import Snapshot
+    from token_pulse.domain import Sample
+    from token_pulse.history import History
+    from token_pulse.logs import LogEvidence
+
+    now = time.time()
+    values = tuple(
+        Sample("task", "turn", str(i), now - 1 - i / 1000, 100, now - 100) for i in range(10005)
+    )
+    polls = 0
+    attempts = 0
+    updates = []
+
+    class SyntheticCollector:
+        def __init__(self, root):
+            self.evidence = LogEvidence()
+            self.backfill = Backfill()
+
+        def poll(self):
+            nonlocal polls
+            polls += 1
+            assert polls == 1
+            return Snapshot(samples=values, at=now)
+
+    original = History.append
+
+    def append(self, samples, **kwargs):
+        nonlocal attempts
+        if samples:
+            attempts += 1
+            if attempts == 1:
+                raise OSError("synthetic temporary failure")
+        return original(self, samples, **kwargs)
+
+    monkeypatch.setattr("token_pulse.service.Collector", SyntheticCollector)
+    monkeypatch.setattr(History, "append", append)
+    monitor = Monitor(tmp_path / "source", tmp_path / "data", interval=0.1)
+
+    def publish(update):
+        updates.append(update)
+        if "history_unavailable" not in update.snapshot.diagnostics or len(updates) > 3:
+            monitor.stopped.set()
+
+    monkeypatch.setattr(monitor, "_publish", publish)
+    monitor._run()
+    assert polls == 1 and attempts == 2
+    assert len(updates[-1].history) == 10005
+    history = History(tmp_path / "data/history.sqlite")
+    assert len(history.read()) == 10005
     history.close()

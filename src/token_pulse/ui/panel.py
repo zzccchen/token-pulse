@@ -485,6 +485,11 @@ class Panel(QMainWindow):
                 observed_conversations=self.view.observed_conversations,
             )
         )
+        inferred = sum(s.tps is None and s.display_tps is not None for s in self.view.samples)
+        if inferred:
+            self.sample_info.setText(
+                self.sample_info.text() + tr(" · {count} 段推测", count=inferred)
+            )
         self.sample_info.setToolTip(
             tr(
                 "共 {value} 段记录 · 汇总此模型全部输出\n"
@@ -499,8 +504,10 @@ class Panel(QMainWindow):
             for reason, count in exclusions.most_common()
         ]
         self.coverage.setText(tr("{excluded} 段未计入", excluded=summary.excluded))
+        if inferred:
+            self.coverage.setText(tr("{count} 段无法估算", count=summary.excluded - inferred))
         self.coverage.setToolTip("\n".join(reasons))
-        self.coverage.setVisible(bool(summary.excluded))
+        self.coverage.setVisible(bool(summary.excluded - inferred))
         recent = self.recent_tasks(now)
         states = Counter(task.display_state(now) for task in recent)
         active = sum(states[state] for state in ("waiting", "generating", "tool"))
@@ -654,7 +661,7 @@ class Panel(QMainWindow):
                 "提交层级来自客户端轮次提交日志，不等于出站请求或服务端实际执行层级。主面板按模型汇总全部模式、渠道和思考强度；原始值保留供追溯。全局配置也不"
                 "能证明请求实际使用。平均速度按有效总输出 tokens 和对应输出时长加权。"
                 "登录方式及其缺失记录不拆组，原始证据保留在历史与 "
-                "CSV。历史最多保留 30 天 / 10,000 段；自动分批补读近 7 "
+                "CSV。历史保留最近 7 天，不按记录数量截断；自动分批补读近 7 "
                 "天索引中的会话，包括归档任务。索引遗漏、记录损坏或日志已清理时仍可能缺失。"
             ),
             "muted",

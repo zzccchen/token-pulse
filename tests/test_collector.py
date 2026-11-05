@@ -34,7 +34,9 @@ def make_source(root):
     )
     with closing(sqlite3.connect(root / "state_5.sqlite")) as c, c:
         c.execute("CREATE TABLE threads(id,rollout_path,title,archived,updated_at)")
-        c.execute("INSERT INTO threads VALUES(?,?,?,0,1)", ("task", str(path), "PRIVATE TITLE"))
+        c.execute(
+            "INSERT INTO threads VALUES(?,?,?,0,1767225603)", ("task", str(path), "PRIVATE TITLE")
+        )
     return path
 
 
@@ -57,6 +59,23 @@ def test_empty_source_and_invalid_config(tmp_path):
     snapshot = Collector(tmp_path).poll()
     assert not snapshot.tasks
     assert set(snapshot.diagnostics) >= {"no_sessions", "config_unavailable"}
+
+
+def test_expired_indexed_tasks_do_not_enter_live_collection(tmp_path):
+    make_source(tmp_path)
+    snapshot = Collector(tmp_path).poll(1767225610 + 8 * 86400)
+    assert not snapshot.tasks
+    assert not snapshot.samples
+    assert snapshot.backfill_completed == 0
+
+
+def test_week_boundary_keeps_parser_prefix_for_output_completed_in_window(tmp_path):
+    make_source(tmp_path)
+    snapshot = Collector(tmp_path).poll(1767225602 + 7 * 86400)
+    assert len(snapshot.samples) == 1
+    assert snapshot.samples[0].ended_at == 1767225602
+    assert snapshot.samples[0].turn_id == "turn"
+    assert snapshot.samples[0].context.model == "model-a"
 
 
 def test_database_version_order_is_numeric(tmp_path):

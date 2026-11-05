@@ -158,6 +158,26 @@ class Sample:
     response_aliases: tuple[str, ...] = ()
     evidence_sources: tuple[str, ...] = ()
     response_kind: str | None = None
+    cycle_started_at: float | None = None
+    cycle_ended_at: float | None = None
+    cycle_anchor: str | None = None
+    cycle_revision: int = 0
+
+    @property
+    def rate_estimate(self):
+        from token_pulse.relaxed import estimate
+
+        return estimate(self)
+
+    @property
+    def display_tps(self) -> float | None:
+        value = self.rate_estimate
+        return value.tokens_per_second if value else None
+
+    @property
+    def display_seconds(self) -> float | None:
+        value = self.rate_estimate
+        return value.ended_at - value.started_at if value else None
 
     @property
     def exclusion(self) -> str | None:
@@ -356,6 +376,7 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
     )
     return replace(
         base,
+        **merge_cycle(previous, incoming, base),
         response_kind=incoming.response_kind or previous.response_kind,
         issue="compaction_usage"
         if (incoming.response_kind or previous.response_kind) == "compaction"
@@ -391,6 +412,30 @@ def reconcile(previous: Sample, incoming: Sample) -> Sample:
             output_start=base.started_at,
         ),
     )
+
+
+def merge_cycle(previous: Sample, incoming: Sample, base: Sample) -> dict:
+    fields = ("cycle_started_at", "cycle_ended_at", "cycle_anchor", "cycle_revision")
+    compatible = [
+        s
+        for s in (previous, incoming)
+        if s.cycle_anchor is not None
+        and (s.output_tokens, s.token_scope, s.ended_at)
+        == (base.output_tokens, base.token_scope, base.ended_at)
+    ]
+    if not compatible:
+        return dict(cycle_started_at=None, cycle_ended_at=None, cycle_anchor=None, cycle_revision=0)
+    revision = max(s.cycle_revision for s in compatible)
+    newest = [s for s in compatible if s.cycle_revision == revision]
+    values = {tuple(getattr(s, name) for name in fields) for s in newest}
+    if len(values) > 1 or any(s.cycle_anchor == "ambiguous" for s in newest):
+        return dict(
+            cycle_started_at=None,
+            cycle_ended_at=None,
+            cycle_anchor="ambiguous",
+            cycle_revision=revision,
+        )
+    return dict(zip(fields, next(iter(values)), strict=True))
 
 
 def response_alias_index(samples: list[Sample]) -> dict[tuple, set[str]]:

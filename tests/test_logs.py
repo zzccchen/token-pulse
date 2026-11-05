@@ -116,9 +116,9 @@ def test_sqlite_readonly_incremental_and_schema_failure(tmp_path):
         )
     logs = LogEvidence()
     reader = SqliteLogs(path, logs)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert reader.cursor == 1
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert len(logs.starts) == 1
     connection = read_only(path)
     try:
@@ -149,9 +149,42 @@ def test_bad_row_cannot_stall_the_log_cursor(tmp_path):
         )
     logs = LogEvidence()
     reader = SqliteLogs(path, logs)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert reader.cursor == 2
     assert list(logs.starts) == [("task", "good")]
+
+
+def test_seven_day_filter_applies_to_startup_and_incremental_diagnostics(tmp_path):
+    path = tmp_path / "logs.sqlite"
+    now = 2_000_000
+    cutoff = now - 7 * 86400
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE logs(id INTEGER PRIMARY KEY,ts,ts_nanos,"
+            "thread_id,target,feedback_log_body)"
+        )
+        db.executemany(
+            "INSERT INTO logs VALUES(?,?,?,?,?,?)",
+            [
+                (i + 1, at, 0, "task", "codex_core::stream_events_utils", body(str(i)))
+                for i, at in enumerate([cutoff - 1, cutoff, now])
+            ],
+        )
+    evidence = LogEvidence()
+    reader = SqliteLogs(path, evidence, batch_size=1)
+    while True:
+        assert reader.poll(now) is None
+        if not reader.pending:
+            break
+    assert set(evidence.starts) == {("task", "1"), ("task", "2")}
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "INSERT INTO logs VALUES(4,?,0,?,?,?)",
+            (cutoff - 1, "task", "codex_core::stream_events_utils", body("late-old")),
+        )
+    assert reader.poll(now) is None
+    assert reader.cursor == 4
+    assert ("task", "late-old") not in evidence.starts
 
 
 def test_sparse_submissions_are_backfilled_outside_output_id_window(tmp_path):
@@ -173,9 +206,9 @@ def test_sparse_submissions_are_backfilled_outside_output_id_window(tmp_path):
         )
     evidence = LogEvidence()
     reader = SqliteLogs(path, evidence, backfill=10)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert evidence.submissions["task", "turn"].tier == "priority"
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert len(evidence.submissions) == 1
 
 
@@ -201,7 +234,7 @@ def test_retained_output_starts_and_auth_are_read_outside_generic_window(tmp_pat
         db.executemany("INSERT INTO logs VALUES(?,?,?,?,?,?)", rows)
     evidence = LogEvidence()
     reader = SqliteLogs(path, evidence, backfill=10)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert evidence.starts["task", "a"].at == 10
     assert evidence.starts["task", "a"].auth_mode == "Chatgpt"
     assert not evidence.starts["task", "a"].ambiguous
@@ -253,14 +286,16 @@ def test_scoped_feedback_is_recovered_and_replayed_without_inventing_requests(tm
         )
     evidence = LogEvidence()
     reader = SqliteLogs(path, evidence, backfill=10)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert evidence.config_tags["task", "turn-a"].tier == "ultrafast"
     assert not evidence.submissions
     assert evidence.starts["task", "a"].requested_tier is None
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert len(evidence.config_tags) == 1
     with sqlite3.connect(path) as connection:
         connection.execute("DELETE FROM logs WHERE id>1")
-    assert reader.poll() is None  # A truncated database resets and replays its retained evidence.
+    assert (
+        reader.poll(100) is None
+    )  # A truncated database resets and replays its retained evidence.
     assert len(evidence.config_tags) == 1
     assert not evidence.starts

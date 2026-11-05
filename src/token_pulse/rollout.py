@@ -8,13 +8,14 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from token_pulse.cycle_timing import CycleBoundaries
 from token_pulse.domain import Context, Sample, Task, bind_thread_config
 from token_pulse.logs import LogEvidence, label
 from token_pulse.tailer import AmbiguousObject
 from token_pulse.thread_settings import ThreadSettings
 
 REJECTIONS = {"inherited_history", "stale_usage_snapshot", "superseded_usage"}
-PARSER_REVISION = 12
+PARSER_REVISION = 14
 # This shadow only withdraws revision-1 split-usage records. An unrelated parser
 # upgrade must not make the same legacy observation override newer saved proof.
 LEGACY_WITHDRAWAL_REVISION = 2
@@ -60,6 +61,9 @@ class Response:
     first_kind: str | None = None
     usage_issue: str | None = None
     response_kind: str | None = None
+    cycle_started_at: float | None = None
+    cycle_ended_at: float | None = None
+    cycle_anchor: str | None = None
 
 
 class Rollout:
@@ -107,8 +111,10 @@ class Rollout:
         self.history_ordinal_missing = False
         self.thread_settings = ThreadSettings(task_id)
         self.communication_input: tuple[float, int | None] | None = None
+        self.cycles = CycleBoundaries()
 
     def damage(self, reason: str) -> None:
+        self.cycles.clear()
         self.communication_input = None
         if reason in {"invalid_record", "out_of_order", "record_gap", "incomplete_boundary"}:
             self.thread_settings.gap()
@@ -117,6 +123,7 @@ class Rollout:
         self.damaged = True
 
     def reset(self, *, legacy: bool = True) -> None:
+        self.cycles.clear()
         self.communication_input = None
         self.thread_settings.reset()
         self.items.clear()
@@ -166,6 +173,22 @@ class Rollout:
         previous_boundary = self._legacy_boundary(record)
         before = self.responses[-1] if self.responses else None
         self._feed(record)
+        self.cycles.feed(record, self, timestamp(record.get("timestamp")))
+        after = self.responses[-1] if self.responses else None
+        if after is not None and after is not before and after.cycle_anchor is None:
+            envelope = self.cycles.response(after)
+            if envelope:
+                enriched = replace(
+                    after,
+                    cycle_started_at=envelope["elapsed_start"],
+                    cycle_ended_at=envelope["usage_at"],
+                    cycle_anchor=envelope["anchor"],
+                )
+                self.responses[-1] = enriched
+                if self.legacy_candidate is after:
+                    self.legacy_candidate = enriched
+                if (after.turn_id, after.id) in self.recent_usage:
+                    self.recent_usage[after.turn_id, after.id] = enriched
         if record.get("type") == "token_usage_record":
             self.legacy_candidate = None
         if previous_boundary is not None:
@@ -417,6 +440,17 @@ class Rollout:
         if value.get("type") == "additional_tools":
             return value.get("role") in {"system", "developer"} and isinstance(
                 value.get("tools"), list
+            )
+        if value.get("type") == "configuration_update":
+            # A durable backend input control, not generated output. Accept only
+            # the known outer shape; do not infer a model/effort setting from it.
+            reasoning = value.get("reasoning")
+            return (
+                set(value) == {"type", "reasoning"}
+                and type(reasoning) is dict
+                and set(reasoning) == {"effort"}
+                and isinstance(reasoning["effort"], str)
+                and 0 < len(reasoning["effort"]) <= 64
             )
         if value.get("type") != "agent_message" or communication is None:
             return False
@@ -687,6 +721,10 @@ class Rollout:
                         issue=issue or "missing_output_items",
                         response_kind=response.response_kind,
                         parser_revision=revision,
+                        cycle_started_at=response.cycle_started_at,
+                        cycle_ended_at=response.cycle_ended_at,
+                        cycle_anchor=response.cycle_anchor,
+                        cycle_revision=1 if response.cycle_anchor else 0,
                     )
                 )
                 continue
@@ -815,6 +853,10 @@ class Rollout:
                     response_kind=response.response_kind,
                     parser_revision=revision,
                     timing_source=timing_source,
+                    cycle_started_at=response.cycle_started_at,
+                    cycle_ended_at=response.cycle_ended_at,
+                    cycle_anchor=response.cycle_anchor,
+                    cycle_revision=1 if response.cycle_anchor else 0,
                     response_aliases=(
                         hashlib.sha256(
                             "|".join(item for item, _ in response.items).encode()

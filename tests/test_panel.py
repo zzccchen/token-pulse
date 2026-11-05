@@ -62,7 +62,7 @@ def test_channel_is_hidden_in_normal_selector_and_unknown_confirmation_in_detail
     panel.apply(replace(snapshot, samples=(*snapshot.samples, changed)))
     assert panel.group_box.count() == 1
     assert "openai" not in panel.group_box.currentText()
-    assert panel.view.summary.count == len(snapshot.samples) + 1
+    assert panel.view.summary.count == sum(s.tps is not None for s in snapshot.samples) + 1
     details = dict(panel.detail_values())
     assert "another" in details["接入渠道"] and "openai" in details["接入渠道"]
     assert panel.group_box.count() == 1
@@ -91,7 +91,7 @@ def test_login_metadata_is_visible_without_splitting_samples(app):
             box = dialog.findChild(QComboBox)
             assert box is None
             assert panel.selected_key == series_key(missing)
-            assert panel.view.summary.count == len(snapshot.samples) + 1
+            assert panel.view.summary.count == sum(s.tps is not None for s in snapshot.samples) + 1
             assert len(panel.selected_tasks) == len(snapshot.tasks)
             login = dict(panel.detail_values())["登录方式记录"]
             assert "Chatgpt" in login and "未记录（1）" in login
@@ -392,5 +392,5 @@ def test_scatter_click_opens_one_output_and_preserves_mode_evidence(app):
     assert panel.sample_window.filtered == [sample]
     assert panel.sample_window.heading.text() == "单段输出"
     assert sample.context.submitted_tier == "default"
-    assert panel.view.summary.count == 20
+    assert panel.view.summary.count == 15
     panel.close()

@@ -61,6 +61,57 @@ def test_tool_declarations_are_inputs_even_between_output_and_usage(role):
     assert "PRIVATE" not in repr(parser.__dict__)
 
 
+@pytest.mark.parametrize("at", [1, 12.5])
+def test_configuration_update_is_input_not_part_of_the_measured_response(at):
+    parser = ready()
+    if at > 12:
+        output(parser)
+    event(
+        parser,
+        "response_item",
+        {"type": "configuration_update", "reasoning": {"effort": "high"}},
+        at,
+    )
+    if at < 12:
+        output(parser)
+    usage(parser)
+    value = parser.samples(evidence())[0]
+    assert value.tps == 50 and value.ended_at == 1767225612
+    assert value.output_tokens == 100
+    assert parser.responses[0].items == (("item", 1767225612),)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"type": "configuration_update"},
+        {"type": "configuration_update", "reasoning": None},
+        {"type": "configuration_update", "reasoning": {"effort": 1}},
+        {"type": "configuration_update", "reasoning": {"effort": "high"}, "content": "PRIVATE"},
+        {"type": "configuration_update", "reasoning": {"effort": "high", "other": True}},
+    ],
+)
+def test_unknown_configuration_update_shapes_remain_excluded(value):
+    parser = ready()
+    event(parser, "response_item", value, 1)
+    output(parser)
+    usage(parser)
+    assert parser.samples(evidence())[0].exclusion == "unsupported_output_item"
+    assert "PRIVATE" not in repr(parser.__dict__)
+
+
+def test_configuration_update_duplicate_fields_cannot_hide_ambiguity():
+    parser = ready()
+    value = json.loads(
+        '{"type":"configuration_update","reasoning":{"effort":"high","effort":"low"}}',
+        object_pairs_hook=json_object,
+    )
+    event(parser, "response_item", value, 1)
+    output(parser)
+    usage(parser)
+    assert parser.samples(evidence())[0].exclusion == "unsupported_output_item"
+
+
 @pytest.mark.parametrize("invalid", ["absent", "gap", "reset", "intervening", "malformed"])
 def test_unproven_agent_messages_remain_unsupported(invalid):
     parser = ready()

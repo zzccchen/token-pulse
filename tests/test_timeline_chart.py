@@ -13,6 +13,41 @@ from token_pulse.timeline import timeline
 from token_pulse.ui.timeline_chart import TimelineChart, mode_info, sample_text
 
 
+@pytest.mark.parametrize("mode", ["ultrafast", "fast", "standard", "other"])
+def test_reliability_controls_fill_for_every_mode(mode):
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    for reliable in (True, False):
+        image = QImage(24, 24, QImage.Format.Format_ARGB32)
+        image.fill(QColor("white"))
+        painter = QPainter(image)
+        TimelineChart.marker(painter, QPointF(12, 12), mode, 6, QColor("red"), reliable)
+        painter.end()
+        assert image.pixelColor(12, 12) == QColor("red" if reliable else "white")
+
+
+def test_inferred_point_has_label_exact_click_target_and_no_weight_in_output_mean():
+    app = QApplication.instance() or QApplication([])
+    reliable = Sample("a", "b", "reliable", 101, 100, 91)
+    inferred = replace(reliable, response_id="inferred", issue="unverified_lifecycle_start")
+    view = timeline([reliable, inferred], now=110, duration=60, step=30)
+    chart = TimelineChart()
+    chart.resize(410, 220)
+    chart.set_data(view)
+    assert view.summary.count == 1 and view.summary.weighted_tps == 10
+    assert len(chart.points) == 2 and chart.rates == (10, 10)
+    assert "推测" in sample_text(inferred)
+    opened = []
+    chart.sample_activated.connect(opened.append)
+    chart.show()
+    app.processEvents()
+    QTest.keyClick(chart, Qt.Key.Key_End)
+    QTest.keyClick(chart, Qt.Key.Key_Return)
+    assert opened == [inferred]
+    assert "推测" in chart.accessibleDescription()
+    chart.close()
+
+
 def test_points_use_individual_rates_and_click_or_keyboard_open_exact_sample():
     app = QApplication.instance() or QApplication([])
     chart = TimelineChart()

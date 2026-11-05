@@ -69,6 +69,16 @@ def main():
         QTest.qWait(180)
         if not widget.grab().save(str(args.output / f"{name}.png")):
             raise OSError("Could not save preview")
+        if name == "panel":
+            panel.chart.active = next(
+                (i for i, sample in enumerate(panel.chart.points) if sample.tps is None), None
+            )
+            panel.chart.show_active()
+            app.processEvents()
+            if not widget.grab().save(str(args.output / "panel-inferred.png")):
+                raise OSError("Could not save inferred-point preview")
+            panel.chart.active = None
+            panel.chart.show_active()
         if name == "history":
             widget.table.horizontalScrollBar().setValue(
                 widget.table.horizontalScrollBar().maximum()

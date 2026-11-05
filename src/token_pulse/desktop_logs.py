@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from token_pulse.logs import LogEvidence
+from token_pulse.retention import HISTORY_DAYS
 from token_pulse.rollout import timestamp
 from token_pulse.stream_activity import ACTIVITY_REVISION, Activity, merge_activity
 from token_pulse.tailer import Batch, JsonlTail, json_object
@@ -318,7 +319,9 @@ class DesktopLogs:
             return
         paths = []
         day = datetime.fromtimestamp(now, UTC)
-        for offset in range(9):
+        # Eight intersecting UTC dates plus one predecessor for writer continuity.
+        # Old prefixes establish ownership only; archives retain seven-day evidence.
+        for offset in range(HISTORY_DAYS + 2):
             folder = self.root / (day - timedelta(days=offset)).strftime("%Y/%m/%d")
             paths.extend(sorted(folder.glob("*.log")))
             if len(paths) >= 256:

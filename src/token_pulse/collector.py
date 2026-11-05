@@ -23,6 +23,7 @@ from token_pulse.logs import (
     label,
     read_only,
 )
+from token_pulse.retention import HISTORY_DAYS, HISTORY_SECONDS
 from token_pulse.rollout import REJECTIONS, Rollout
 from token_pulse.stats import unique
 from token_pulse.tailer import JsonlTail
@@ -183,8 +184,9 @@ class Collector:
                     rows = connection.execute(
                         f"SELECT id, rollout_path, {title_column}, "
                         + ", ".join(optional)
-                        + f" FROM threads WHERE {archive_filter} ORDER BY {updated} DESC LIMIT ?",
-                        (self.max_tasks,),
+                        + f" FROM threads WHERE {archive_filter} AND {updated} >= ? "
+                        + f"ORDER BY {updated} DESC LIMIT ?",
+                        (now - HISTORY_SECONDS, self.max_tasks),
                     ).fetchall()
                 for task_id, path, title, model, effort, provider in rows:
                     path = rollout_path(self.root, path)
@@ -206,13 +208,13 @@ class Collector:
             directories = [self.root / "sessions"]
             directories += [
                 self.root / "sessions" / (recent - timedelta(days=i)).strftime("%Y/%m/%d")
-                for i in range(3)
+                for i in range(HISTORY_DAYS + 1)
             ]
             candidates = []
             for directory in directories:
                 for path in directory.glob("*.jsonl"):
                     match = re.search(r"([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})", path.name)
-                    if match:
+                    if match and path.stat().st_mtime >= now - HISTORY_SECONDS:
                         candidates.append((path.stat().st_mtime, match[1], path))
             for _, task_id, path in sorted(candidates, reverse=True)[: self.max_tasks]:
                 found.append((task_id, path, "", Context()))
@@ -230,7 +232,7 @@ class Collector:
                         "SELECT id, rollout_path, "
                         + ", ".join(optional)
                         + f" FROM threads WHERE {updated} >= ? ORDER BY {updated} DESC",
-                        (now - 604800,),
+                        (now - HISTORY_SECONDS,),
                     )
                     for task_id, path, model, effort, provider in rows:
                         path = rollout_path(self.root, path)
@@ -268,7 +270,7 @@ class Collector:
         if self.logs:
             # Drain at most 10k rows per poll, allowing rollout/log arrival to differ.
             for _ in range(2):
-                issue = self.logs.poll()
+                issue = self.logs.poll(now)
                 if issue:
                     issues.add(issue)
                     break
@@ -318,8 +320,9 @@ class Collector:
         if self.transport_readers:
             first_path = next(iter(self.transport_readers))
             self.transport_readers[first_path] = self.transport_readers.pop(first_path)
-        observed = [s for s in (*recovered, *samples) if s.issue not in REJECTIONS]
-        rejected = [s for s in (*recovered, *samples) if s.issue in REJECTIONS]
+        recent = [s for s in (*recovered, *samples) if now - HISTORY_SECONDS <= s.ended_at <= now]
+        observed = [s for s in recent if s.issue not in REJECTIONS]
+        rejected = [s for s in recent if s.issue in REJECTIONS]
         return Snapshot(
             tuple(sorted(tasks, key=lambda t: t.updated_at, reverse=True)),
             tuple(unique(observed)),

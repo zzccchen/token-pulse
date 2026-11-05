@@ -13,6 +13,7 @@ from contextlib import closing
 from pathlib import Path
 
 from token_pulse.logs import read_only
+from token_pulse.retention import HISTORY_SECONDS
 from token_pulse.transport import REVISION, TARGETS, Transport
 
 MAX_ROW = 2 * 1024 * 1024
@@ -96,7 +97,7 @@ class TransportLogs:
                     first = db.execute(
                         "SELECT min(id) FROM (SELECT id FROM logs WHERE target IN (?,?) "
                         "AND ts>=? ORDER BY id DESC LIMIT ?)",
-                        (*TARGETS, now - 604800, self.backfill),
+                        (*TARGETS, now - HISTORY_SECONDS, self.backfill),
                     ).fetchone()[0]
                     self.cursor = first - 1 if first is not None else maximum
                     self.anchor = None
@@ -104,7 +105,7 @@ class TransportLogs:
                 rows = db.execute(
                     f"SELECT {projection} FROM logs WHERE id>? AND target IN (?,?) AND ts>=? "
                     "ORDER BY id LIMIT ?",
-                    (self.cursor, *TARGETS, now - 604800, self.batch_size),
+                    (self.cursor, *TARGETS, now - HISTORY_SECONDS, self.batch_size),
                 )
                 processed = 0
                 for row in rows:

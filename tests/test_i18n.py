@@ -144,14 +144,19 @@ def test_lifecycle_exclusions_keep_tokens_and_reason_in_both_languages():
             panel.retranslate_ui()
             history.apply([corrected])
             panel.apply(Snapshot(samples=(corrected,), at=corrected.ended_at + 1))
-            assert history.table.item(0, 4).text() == "—"
+            assert float(history.table.item(0, 4).text()) == pytest.approx(corrected.display_tps)
             assert history.table.item(0, 5).text() == str(corrected.output_tokens)
-            assert history.table.item(0, 6).text() == "—"
-            assert history.table.item(0, 14).text() == i18n.tr(
-                "仅有生命周期时间，缺少独立的输出流起点"
+            assert float(history.table.item(0, 6).text()) == pytest.approx(
+                corrected.display_seconds, abs=0.001
+            )
+            assert history.table.item(0, 14).text() == i18n.tr("推测：生命周期")
+            assert (
+                i18n.tr("仅有生命周期时间，缺少独立的输出流起点")
+                in history.table.item(0, 14).toolTip()
             )
             assert i18n.tr("生命周期记录（流起点未确认）") in history.table.item(0, 14).toolTip()
-            assert not panel.chart.points
+            assert panel.chart.points == (corrected,)
+            assert panel.view.summary.count == 0
             app.processEvents()
     finally:
         panel.close()
@@ -262,7 +267,7 @@ def test_bilingual_views_keep_statistics_filters_and_exports_identical(tmp_path)
                 assert "Insufficient" not in panel.speed_value.text()
                 assert history.table.horizontalHeaderItem(0).text() == "Time"
                 assert "Not confirmed by the server" in dict(panel.detail_values())["Actual tier"]
-                assert "Insufficient data" in history.summary.text()
+                assert "Unavailable:" in history.summary.text()
                 assert mode_info(unknown)[0] == "other"
                 history.apply([unknown])
                 assert "Unspecified" in history.table.item(0, 9).text()

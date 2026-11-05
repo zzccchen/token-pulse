@@ -165,11 +165,75 @@ def test_rejection_ledger_respects_retention_and_clear(tmp_path):
     history.close()
 
 
-def test_retention_and_capacity(tmp_path):
-    history = History(tmp_path / "history.sqlite", retention_days=1, max_samples=2)
+def test_retention_is_independent_of_cache_capacity(tmp_path):
+    history = History(tmp_path / "history.sqlite", retention_days=1, cache_size=2)
     history.append([sample(response_id=str(i), ended_at=102 + i) for i in range(4)], now=110)
-    assert [s.ended_at for s in history.read()] == [105, 104]
+    assert [s.ended_at for s in history.read()] == [105, 104, 103, 102]
     history.append([], now=100000)
+    assert history.read() == []
+    history.close()
+
+
+def test_week_retains_more_than_ten_thousand_outputs_and_aliases_across_restart(tmp_path):
+    now = 2_000_000
+    cutoff = now - 7 * 86400
+    path = tmp_path / "history.sqlite"
+    history = History(path, cache_size=2)
+    values = [
+        sample(
+            response_id=f"response-{i}",
+            response_aliases=(f"alias-{i}",),
+            ended_at=cutoff + i,
+            started_at=cutoff + i - 2 if i % 2 else None,
+        )
+        for i in range(10005)
+    ]
+    history.append([*values, sample(response_id="expired", ended_at=cutoff - 1)], now=now)
+    history.save_checkpoints({str(i): ("stamp", now) for i in range(10005)}, now=now)
+    assert len(history.read(now=now)) == 10005
+    assert len(history.cache) == 2
+    assert len(history.aliases) == 10005
+    assert len(history.source_checkpoints()) == 10005
+    history.close()
+    history = History(path)
+    # A reread of an evicted write-cache entry must still deduplicate on disk.
+    history.append(values[:1], now=now)
+    rows = history.read(now=now)
+    assert len(rows) == 10005
+    assert sum(s.tps is not None for s in rows) == 5002
+    history.append([], now=now + 1)
+    assert len(history.read(now=now + 1)) == 10004
+    assert len(history.aliases) == 10004
+    history.close()
+
+
+def test_week_read_hides_expired_and_future_rows_before_cleanup(tmp_path):
+    history = History(tmp_path / "history.sqlite", retention_days=30)
+    now = 2_000_000
+    history.append(
+        [
+            sample(response_id=str(i), ended_at=at)
+            for i, at in enumerate([now - 8 * 86400, now - 7 * 86400, now, now + 1])
+        ],
+        now=now,
+    )
+    history.retention_days = 7
+    assert {s.ended_at for s in history.read(now=now)} == {now - 7 * 86400, now}
+    history.append([], now=now)
+    assert len(history.read()) == 3  # Clock-tolerated future row remains hidden until due.
+    history.close()
+
+
+def test_small_write_cache_does_not_evict_rejection_protection(tmp_path):
+    path = tmp_path / "history.sqlite"
+    values = [sample(response_id=str(i), parser_revision=2) for i in range(6)]
+    history = History(path, cache_size=2)
+    history.reject([replace(s, issue="inherited_history") for s in values], now=110)
+    history.append([], now=110)
+    assert len(history.rejections) == 12
+    history.close()
+    history = History(path, cache_size=2)
+    history.append(values, now=111)
     assert history.read() == []
     history.close()
 

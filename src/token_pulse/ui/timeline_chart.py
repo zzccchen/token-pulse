@@ -87,14 +87,29 @@ def duration_text(seconds: float) -> str:
 
 def sample_text(sample: Sample) -> str:
     at = datetime.fromtimestamp(sample.ended_at).strftime("%m-%d %H:%M:%S")
-    return tr(
-        "{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} 总输出 tokens · {seconds} 秒",
-        at=at,
-        value=mode_caption(sample),
-        tps=sample.tps,
-        output_tokens=sample.output_tokens,
-        seconds=duration_text(sample.seconds),
+    return (
+        tr(
+            "{at} · {value}\n{tps:.1f} tokens/s\n{output_tokens:,} 总输出 tokens · {seconds} 秒",
+            at=at,
+            value=mode_caption(sample),
+            tps=sample.display_tps,
+            output_tokens=sample.output_tokens,
+            seconds=duration_text(sample.display_seconds),
+        )
+        + "\n"
+        + timing_caption(sample)
     )
+
+
+def timing_caption(sample: Sample) -> str:
+    value = sample.rate_estimate
+    if value is None:
+        return tr("无法估算")
+    if value.basis == "validated_output":
+        return tr("可靠输出")
+    if value.basis == "unverified_lifecycle":
+        return tr("推测：生命周期")
+    return tr("推测：处理耗时")
 
 
 class TimelineChart(QWidget):
@@ -133,8 +148,8 @@ class TimelineChart(QWidget):
         old = self.points[self.active] if self.active is not None else None
         same_range = self.data and self.data.end - self.data.start == data.end - data.start
         self.data = data
-        self.points = tuple(s for s in data.samples if s.exclusion is None)
-        self.rates = tuple(s.tps for s in self.points)
+        self.points = tuple(s for s in data.samples if s.display_tps is not None)
+        self.rates = tuple(s.display_tps for s in self.points)
         self.maximum = max(10, math.ceil(max(self.rates, default=0) / 10) * 10)
         self._positions = None
         self.active = next(
@@ -149,7 +164,7 @@ class TimelineChart(QWidget):
 
     def plot_rect(self) -> QRectF:
         extra_height = max(rect.top() for rect, _, _ in self.legend_layout())
-        return QRectF(34, 12, max(1, self.width() - 42), max(1, self.height() - 80 - extra_height))
+        return QRectF(34, 12, max(1, self.width() - 42), max(1, self.height() - 98 - extra_height))
 
     def legend_layout(self) -> list[tuple[QRectF, str, str]]:
         font = self.font()
@@ -289,15 +304,20 @@ class TimelineChart(QWidget):
                 tr(
                     "{output_tokens:,} tokens · {seconds} 秒",
                     output_tokens=sample.output_tokens,
-                    seconds=duration_text(sample.seconds),
+                    seconds=duration_text(sample.display_seconds),
                 )
             )
             unit = metrics.horizontalAdvance("tokens/s") + 6
             font.setPixelSize(18)
             font.setBold(True)
-            rate = QFontMetricsF(font).horizontalAdvance(f"{sample.tps:.1f}") + unit
-            width = math.ceil(max(header, detail, rate)) + 12
-        width, height = min(width, self.width() - 16), 70
+            rate = QFontMetricsF(font).horizontalAdvance(f"{sample.display_tps:.1f}") + unit
+            width = (
+                math.ceil(
+                    max(header, detail, rate, metrics.horizontalAdvance(timing_caption(sample)))
+                )
+                + 12
+            )
+        width, height = min(width, self.width() - 16), 88
         left = max(8, min(position.x() - width / 2, self.width() - width - 8))
         top = position.y() - height - 14
         if top < 8:
@@ -334,7 +354,7 @@ class TimelineChart(QWidget):
         painter.setPen(QColor(color))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignRight, mode_caption(sample))
         unit_width = QFontMetricsF(font).horizontalAdvance("tokens/s") + 6
-        rate = f"{sample.tps:.1f}"
+        rate = f"{sample.display_tps:.1f}"
         font.setPixelSize(18)
         font.setBold(True)
         painter.setFont(font)
@@ -354,18 +374,26 @@ class TimelineChart(QWidget):
         detail = tr(
             "{output_tokens:,} tokens · {seconds} 秒",
             output_tokens=sample.output_tokens,
-            seconds=duration_text(sample.seconds),
+            seconds=duration_text(sample.display_seconds),
         )
         detail = QFontMetricsF(font).elidedText(
             detail, Qt.TextElideMode.ElideRight, text_rect.width()
         )
         painter.drawText(QPointF(text_rect.left(), rect.top() + 60), detail)
+        painter.drawText(QPointF(text_rect.left(), rect.top() + 78), timing_caption(sample))
         painter.restore()
 
     @staticmethod
-    def marker(painter: QPainter, position: QPointF, mode: str, radius: float, color: QColor):
+    def marker(
+        painter: QPainter,
+        position: QPointF,
+        mode: str,
+        radius: float,
+        color: QColor,
+        reliable: bool = True,
+    ):
         painter.setPen(QPen(color, 1.2))
-        painter.setBrush(color if mode != "other" else Qt.BrushStyle.NoBrush)
+        painter.setBrush(color if reliable else Qt.BrushStyle.NoBrush)
         x, y = position.x(), position.y()
         if mode == "ultrafast":
             painter.drawPolygon(
@@ -391,8 +419,7 @@ class TimelineChart(QWidget):
         elif mode == "standard":
             painter.drawEllipse(position, radius, radius)
         else:
-            painter.drawLine(QPointF(x - radius, y - radius), QPointF(x + radius, y + radius))
-            painter.drawLine(QPointF(x - radius, y + radius), QPointF(x + radius, y - radius))
+            painter.drawRect(QRectF(x - radius, y - radius, radius * 2, radius * 2))
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -408,6 +435,13 @@ class TimelineChart(QWidget):
             self.marker(painter, rect.topLeft() + QPointF(3, 9), mode, 3, QColor(palette[mode]))
             painter.setPen(QColor(c["muted"]))
             painter.drawText(rect.adjusted(13, 0, 0, 0), Qt.AlignmentFlag.AlignLeft, label)
+        painter.setPen(QColor(c["muted"]))
+        legend_bottom = max(rect.bottom() for rect, _, _ in self.legend_layout())
+        painter.drawText(
+            QRectF(34, plot.bottom() + 48 + legend_bottom, self.width() - 42, 18),
+            Qt.AlignmentFlag.AlignLeft,
+            tr("● 可靠   ○ 推测；均速仅含可靠点"),
+        )
         for rate in (0, self.maximum / 2, self.maximum):
             y = plot.bottom() - rate / self.maximum * plot.height()
             painter.setPen(QPen(QColor(c["line"]), 0.7))
@@ -419,7 +453,14 @@ class TimelineChart(QWidget):
             mode = mode_info(sample)[0]
             color = QColor(palette[mode])
             color.setAlpha(195)
-            self.marker(painter, self.point_position(index), mode, radius, color)
+            self.marker(
+                painter,
+                self.point_position(index),
+                mode,
+                radius,
+                color,
+                reliable=sample.tps is not None,
+            )
         if self.active is not None:
             position = self.point_position(self.active)
             painter.setBrush(Qt.BrushStyle.NoBrush)

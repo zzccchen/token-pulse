@@ -1,6 +1,20 @@
 """English translations keyed by Chinese source templates."""
 
 MESSAGES = {
+    "{value} 段 · {valid} 段可靠 · {inferred} 段推测 · {value2} 段无法估算": (
+        "Records: {value} · Reliable: {valid} · Inferred: {inferred} · Unavailable: {value2}"
+    ),
+    "计时秒数": "Interval seconds",
+    "可靠输出": "Reliable output",
+    "推测：生命周期": "Inferred: lifecycle",
+    "推测：处理耗时": "Inferred: cycle elapsed",
+    "无法估算": "No estimate available",
+    "● 可靠   ○ 推测；均速仅含可靠点": "● Reliable   ○ Inferred; mean uses reliable points",
+    " · {count} 段推测": " · {count} inferred",
+    "{count} 段无法估算": "{count} without estimates",
+    "处理耗时可能包含等待、工具执行和重试": (
+        "Cycle time may include waiting, tool execution and retries"
+    ),
     "仅有生命周期时间，缺少独立的输出流起点": (
         "Lifecycle timing only; independent output-stream start missing"
     ),
@@ -75,8 +89,8 @@ MESSAGES = {
     "仅有工具调用项通知，不是完整生成计时": (
         "Tool call notification only; full generation timing unavailable"
     ),
-    "仅本机统计 · 保留 30 天 / 最多 10,000 段 · 任务标识已匿名化": (
-        "Local statistics · Retained for 30 days / up to 10,000 records · Anonymous task IDs"
+    "仅本机统计 · 保留最近 7 天 · 任务标识已匿名化": (
+        "Local statistics · Retained for the last 7 days · Anonymous task IDs"
     ),
     "任务": "Task",
     "任务索引暂不可用，正在读取近三天会话。": (
@@ -154,7 +168,7 @@ MESSAGES = {
         "提交层级来自客户端轮次提交日志，不等于出站请求或服务端实际执行层级。主面板按模型汇总全部模式、渠"
         "道和思考强度；原始值保留供追溯。全局配置也不能证明请求实际使用。平均速度按有效总输出 "
         "tokens 和对应输出时长加权。登录方式及其缺失记录不拆组，原始证据保留在历史与 "
-        "CSV。历史最多保留 30 天 / 10,000 段；自动分批补读近 7 "
+        "CSV。历史保留最近 7 天，不按记录数量截断；自动分批补读近 7 "
         "天索引中的会话，包括归档任务。索引遗漏、记录损坏或日志已清理时仍可能缺失。"
     ): (
         "Submitted tiers come from client turn-submission"
@@ -168,8 +182,8 @@ MESSAGES = {
         "output duration. Login methods, including "
         "missing values, do not split statistics; "
         "original evidence remains in history and CSV. "
-        "History is retained for up to 30 days / 10,000 "
-        "records. Indexed sessions from the last 7 days, "
+        "History retains the last 7 days without a record-count cap. "
+        "Indexed sessions from the last 7 days, "
         "including archived tasks, are read in batches. "
         "Missing index entries, damaged records or "
         "cleared logs can leave gaps."

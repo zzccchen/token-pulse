@@ -27,7 +27,8 @@ All paths below are relative to `src/token_pulse/`.
 | `desktop_logs.py`, `stream_activity.py`, `activity_archive.py` | Incremental desktop notifications, explicit host association and HMAC-only streaming activity corroboration |
 | `thread_settings.py` | Bounded thread-owned snapshot history, turn-start chronology and association validation |
 | `transport.py`, `transport_logs.py` | Responses sequence validation, bounded SQLite transport recovery and safe cursors |
-| `rollout.py` | Event normalization, usage/timing association, fork and replay detection |
+| `rollout.py`, `cycle_timing.py` | Event normalization, usage/timing association, observed response-cycle boundaries, fork and replay detection |
+| `relaxed.py` | Labeled lifecycle/cycle rate estimates, separate from reliable output summaries |
 | `backfill.py` | Budgeted seven-day historical recovery independent of the live task limit |
 | `history.py` | Local HMAC identities, SQLite persistence, revisions, recovery records, CSV |
 | `storage.py` | Physical storage discovery, lock-scoped snapshot migration and journal isolation |
@@ -49,6 +50,8 @@ Thread snapshots enter the same rollout parser in live collection and historical
 Discovery inspects required SQLite tables/columns in the source root and its historical `sqlite/` layout. It selects one compatible index and general diagnostic database. The transport reader separately checks up to eight compatible diagnostic stores; overlapping outputs merge by exact response identities or complete item aliases. Each source validates its own stream without splicing events across stores. Indexed `.jsonl` paths can resolve to compressed siblings; both spellings share a logical recovery key, while changed container metadata invalidates reuse. Decoding is sequential and in memory. Compressed byte positions are never used as decoded JSONL offsets, and thread-history offsets are not currently consumed.
 
 Live tracking is bounded to 32 recent unarchived tasks. Separate historical recovery covers indexed sessions, including archived ones, in bounded chunks. Completed-file records are saved only after sample persistence; changed files, evidence, or recovery rules trigger re-evaluation. Pending writes are bounded and retried. See [compatibility](compatibility.md) for limits.
+
+Collection and history share a rolling seven-day output window. Samples, aliases and withdrawal records expire by time rather than record count; the bounded write cache does not cap persisted history. Recovery revision 17 invalidates earlier policy checkpoints. Source prefixes can precede the window when needed for counter baselines, ownership or writer continuity. Storage failure pauses further collection until the outstanding batch and its checkpoints are durable, instead of evicting unsaved outputs.
 
 Diagnostic origins and sampling interruptions are archived separately from completed outputs, so a late-discovered session can use evidence observed before source rotation. The archive retains HMAC identities, timestamps, provenance and already normalized evidence only. It restores before collection and commits before source completion checkpoints. Optional SQLite recovery reads a transaction-consistent in-memory snapshot once per diagnostic database reset; only complete, structurally validated records enter the existing evidence parser. It never writes to the source database or saves raw snapshots.
 

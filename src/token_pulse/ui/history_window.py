@@ -32,7 +32,7 @@ from token_pulse.ui.panel import (
     thread_configuration_tooltip,
     turn_override_label,
 )
-from token_pulse.ui.timeline_chart import mode_info
+from token_pulse.ui.timeline_chart import mode_info, timing_caption
 
 
 class HistoryWindow(QMainWindow):
@@ -56,9 +56,7 @@ class HistoryWindow(QMainWindow):
         self.export_button.clicked.connect(self.export)
         title.addWidget(self.export_button)
         layout.addLayout(title)
-        self.scope_label = text_label(
-            tr("仅本机统计 · 保留 30 天 / 最多 10,000 段 · 任务标识已匿名化"), "muted"
-        )
+        self.scope_label = text_label(tr("仅本机统计 · 保留最近 7 天 · 任务标识已匿名化"), "muted")
         layout.addWidget(self.scope_label)
         filter_bar = GlassBar()
         controls = QHBoxLayout(filter_bar)
@@ -105,9 +103,9 @@ class HistoryWindow(QMainWindow):
                 tr("任务"),
                 tr("模型"),
                 tr("模式 / 依据"),
-                "TPS",
+                "tokens/s",
                 tr("输出 tokens"),
-                tr("流秒数"),
+                tr("计时秒数"),
                 tr("强度"),
                 tr("渠道"),
                 tr("提交设置"),
@@ -154,9 +152,7 @@ class HistoryWindow(QMainWindow):
         else:
             self.setWindowTitle(tr("输出历史 · TokenPulse 词脉"))
             self.heading.setText(tr("输出历史"))
-            self.scope_label.setText(
-                tr("仅本机统计 · 保留 30 天 / 最多 10,000 段 · 任务标识已匿名化")
-            )
+            self.scope_label.setText(tr("仅本机统计 · 保留最近 7 天 · 任务标识已匿名化"))
 
     def retranslate_ui(self) -> None:
         self.translate_scope()
@@ -214,11 +210,13 @@ class HistoryWindow(QMainWindow):
         ]
         groups = grouped(self.filtered)
         valid = sum(s.exclusion is None for s in self.filtered)
+        inferred = sum(s.tps is None and s.display_tps is not None for s in self.filtered)
         text = tr(
-            "{value} 段 · {valid} 段有效 · {value2} 段数据不足",
+            "{value} 段 · {valid} 段可靠 · {inferred} 段推测 · {value2} 段无法估算",
             value=len(self.filtered),
             valid=valid,
-            value2=len(self.filtered) - valid,
+            inferred=inferred,
+            value2=len(self.filtered) - valid - inferred,
         )
         if self.filtered and all(s.source == "synthetic-demo" for s in self.filtered):
             text = tr("演示数据 · ") + text
@@ -246,9 +244,9 @@ class HistoryWindow(QMainWindow):
                 sample.task_id[:8],
                 ctx.model or tr("未知"),
                 mode_info(sample)[1],
-                round(sample.tps, 1) if sample.tps is not None else None,
+                round(sample.display_tps, 1) if sample.display_tps is not None else None,
                 sample.output_tokens,
-                round(sample.seconds, 3) if sample.seconds else None,
+                round(sample.display_seconds, 3) if sample.display_seconds is not None else None,
                 ctx.effort or tr("未知"),
                 channel,
                 submission_label(ctx),
@@ -256,7 +254,9 @@ class HistoryWindow(QMainWindow):
                 ctx.requested_tier or tr("未知"),
                 ctx.actual_tier or tr("未确认"),
                 tr("总输出") if sample.token_scope == "total_output" else sample.token_scope,
-                tr(ISSUES.get(sample.exclusion, "数据不足"))
+                timing_caption(sample)
+                if sample.display_tps is not None
+                else tr(ISSUES.get(sample.exclusion, "数据不足"))
                 if sample.exclusion
                 else (tr("演示样本") if sample.source == "synthetic-demo" else tr("日志估算")),
                 thread_configuration_label(ctx),
@@ -290,6 +290,13 @@ class HistoryWindow(QMainWindow):
                             parser_revision=sample.parser_revision,
                         )
                     )
+                if column in {4, 6, 14} and sample.display_tps is not None:
+                    detail = timing_caption(sample)
+                    if sample.exclusion:
+                        detail += "\n" + tr(ISSUES.get(sample.exclusion, "数据不足"))
+                    if sample.cycle_anchor in {"previous_usage", "task_started"}:
+                        detail += "\n" + tr("处理耗时可能包含等待、工具执行和重试")
+                    item.setToolTip(item.toolTip() + "\n" + detail)
                 if 4 <= column <= 6:
                     item.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter

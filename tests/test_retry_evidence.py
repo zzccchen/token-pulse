@@ -96,9 +96,9 @@ def test_retained_retries_outside_generic_log_window_still_correct_history(tmp_p
         db.execute("INSERT INTO logs VALUES(100000,20,0,'task','other','unrelated')")
     logs = LogEvidence()
     reader = SqliteLogs(path, logs, backfill=10)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert logs.interrupted("task", "turn", 9, 11)
-    assert reader.poll() is None
+    assert reader.poll(100) is None
     assert logs.interruptions == {("task", "turn"): [10]}
 
 

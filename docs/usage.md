@@ -26,7 +26,7 @@ Recent state uses evidence no older than 120 seconds. Older observations do not 
 
 History allows filtering and inspecting saved records, including raw model, effort, channel, and tier evidence. CSV preserves original fields and machine-readable codes regardless of interface language. Identifiers are locally pseudonymized; spreadsheet formula prefixes are escaped.
 
-History retains at most 30 days and 10,000 samples. Background recovery scans accessible indexed sessions updated within seven days, including archived ones. This takes multiple batches. A completed scan does not prove the original logs are complete.
+History retains outputs completed in the rolling last seven days, without a record-count cap. Older observations expire by completion time; the same window applies to history and CSV. Background recovery scans accessible indexed sessions updated within seven days, including archived ones. This takes multiple batches. A completed scan does not prove the original logs are complete.
 
 ## Settings and language
 
@@ -81,3 +81,7 @@ uv run token-pulse-cli --language en --diagnose
 ```
 
 This performs bounded collection and reports the last poll, not a full seven-day audit. It excludes titles and paths. Review output before sharing, and include OS, desktop, versions, and reproduction steps in a [bug report](https://github.com/zzccchen/token-pulse/issues/new?template=bug_report.yml). Do not upload raw logs.
+
+## Reliable and inferred points
+
+Filled markers use independently supported output timing. Hollow markers use an unverified lifecycle or observed response-cycle interval. Shape and color still identify the mode; unknown modes use a square. Hover or open a record to inspect its timing class. Cycle elapsed time may contain waiting, tool execution and retries. The window mean, median/range and tray speed use reliable samples only. The panel counts inferred and unavailable records separately; history and CSV retain the original exclusion and observed estimate basis.

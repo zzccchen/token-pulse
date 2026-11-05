@@ -6,10 +6,11 @@ import math
 from dataclasses import dataclass
 
 from token_pulse.domain import Context, Sample
+from token_pulse.retention import HISTORY_SECONDS
 from token_pulse.stats import Summary, summarize, unique
 
 # Duration and fixed bucket width, in seconds. Bucket edges stay stable during refresh.
-RANGES = {"30m": (1800, 30), "1d": (86400, 1800), "7d": (604800, 14400)}
+RANGES = {"30m": (1800, 30), "1d": (86400, 1800), "7d": (HISTORY_SECONDS, 14400)}
 
 
 def series_key(sample: Sample) -> tuple[Context]:
