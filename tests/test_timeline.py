@@ -3,7 +3,26 @@ from dataclasses import replace
 import pytest
 
 from token_pulse.domain import Context, Sample
-from token_pulse.timeline import RANGES, series, timeline
+from token_pulse.timeline import RANGES, display_percentile_bounds, series, timeline
+
+
+@pytest.mark.parametrize(
+    "rates,expected",
+    [
+        ((), None),
+        ((100,), None),
+        ((1, 1000), None),
+        ((10, 10, 10), (10, 10)),
+        ((1000, 10, 0), (0.2, 980.2)),
+        (tuple(range(101)), (1, 99)),
+    ],
+)
+def test_display_percentiles_interpolate_without_emptying_small_samples(rates, expected):
+    bounds = display_percentile_bounds(rates)
+    if expected is None:
+        assert bounds is None
+    else:
+        assert bounds == pytest.approx(expected)
 
 
 def sample(task="a", end=101, tokens=100, seconds=10, **context):

@@ -17,6 +17,62 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
+def test_percentile_toggle_keeps_statistics_and_survives_range_model_and_language_changes(app):
+    from token_pulse.i18n import set_language
+
+    panel = Panel()
+    snapshot = demo_snapshot()
+    base = snapshot.samples[0]
+    samples = tuple(
+        replace(
+            base,
+            response_id=f"percentile-{i}",
+            ended_at=snapshot.at - 300,
+            started_at=snapshot.at - 301,
+            output_tokens=rate,
+        )
+        for i, rate in enumerate((1, 10, 10000))
+    )
+    old = replace(
+        samples[-1],
+        response_id="old",
+        ended_at=snapshot.at - 7200,
+        started_at=snapshot.at - 7201,
+        output_tokens=20,
+    )
+    other = replace(
+        samples[1], response_id="other", context=replace(base.context, model="other-model")
+    )
+    try:
+        panel.apply(replace(snapshot, tasks=(), samples=(*samples, old, other)))
+        panel.group_box.setCurrentIndex(panel.group_index(series_key(base)))
+        assert panel.chart.trim_extremes
+        panel.set_trim_extremes(False)
+        before = (panel.view.summary, panel.speed_value.text(), panel.summary.text())
+        panel.set_trim_extremes(True)
+        assert panel.chart.points == (samples[1],)
+        assert panel.chart.hidden_count == 2
+        assert (panel.view.summary, panel.speed_value.text(), panel.summary.text()) == before
+        assert "隐藏 2 点" in panel.chart_filter_info.text()
+        assert "历史观测" == panel.status.text()
+        panel.set_range("1d")
+        assert panel.chart.points == (old, samples[1])
+        panel.group_box.setCurrentIndex(panel.group_index(series_key(other)))
+        assert panel.chart.points == (other,) and panel.chart.hidden_count == 0
+        set_language("en")
+        panel.retranslate_ui()
+        assert "0 hidden" in panel.chart_filter_info.text()
+        assert panel.chart.trim_extremes and panel.range_name == "1d"
+        assert panel.selected_key == series_key(other)
+        panel.apply(replace(snapshot, tasks=(), samples=()))
+        assert panel.chart.points == () and "0 shown" in panel.chart_filter_info.text()
+        panel.set_trim_extremes(False)
+        assert panel.chart_filter_info.isHidden()
+    finally:
+        panel.close()
+        set_language("zh_CN")
+
+
 def test_dropdown_selection_survives_new_models_and_missing_samples(app):
     panel = Panel()
     snapshot = demo_snapshot()

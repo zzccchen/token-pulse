@@ -26,6 +26,7 @@ Source tools include an [isolated exclusion audit](docs/development.md#isolated-
 
 - **One view per model.** Combine conversations over 30 minutes, 1 day, or 7 days; inspect the weighted average, median, range, and sample count.
 - **Every measured output.** Explore a scatter plot, hover for timing and tokens, and open the anonymous record. Keyboard navigation reaches overlapping points.
+- **P1–P99 chart view.** Hide extreme scatter points by default within the selected model and time range, with a visible hidden-point count. Turn it off in Settings to restore all points; the choice persists. Statistics, history, and CSV retain all records.
 - **Evidence behind the labels.** Inspect global configuration, thread snapshots, turn configuration tags, submitted settings, turn overrides, request values, and server-confirmed values separately. Unknown stays unknown.
 - **A quiet tray companion.** Show an optional speed number or use a normal window when a tray is unavailable.
 - **Local history.** Filter observations and export CSV. Light/dark themes, reduced effects, English, and Simplified Chinese are included.
@@ -78,7 +79,7 @@ When tokens and timing cannot be matched reliably, the record remains available 
 
 ## Status and limits
 
-TokenPulse is an early **0.1.10** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
+TokenPulse is an early **0.1.11** project. The original supported range is **Codex CLI 0.153.4–0.160.0**; newer 0.162/0.163 alpha session formats have received bounded local checks. Current adapters recognize scoped configuration tags in newer feedback logs without treating them as submissions, requests, or confirmation, and display `ultrafast` as a separate Ultra Fast mode. Internal log formats can change; see [compatibility](docs/compatibility.md#codex-versions) for the exact validation scope.
 
 | Environment | Validation scope |
 | --- | --- |

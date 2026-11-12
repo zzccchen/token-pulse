@@ -13,6 +13,46 @@ from token_pulse.timeline import timeline
 from token_pulse.ui.timeline_chart import TimelineChart, mode_info, sample_text
 
 
+def test_percentile_filter_rescales_preserves_boundaries_and_restores_all_points():
+    app = QApplication.instance() or QApplication([])
+    # All points share a completion time; filtering must retain sample order.
+    samples = [Sample("a", "b", str(i), 100, i, 99) for i in range(101)]
+    samples[50] = replace(samples[50], issue="unverified_lifecycle_start")
+    missing = replace(samples[0], response_id="missing", started_at=None)
+    view = timeline([*samples, samples[50], missing], now=110, duration=60, step=30)
+    chart = TimelineChart()
+    chart.set_data(view)
+    chart.show()
+    app.processEvents()
+    chart.active = 100
+    chart.show_active()
+    chart.set_trim_extremes(True)
+    assert chart.points == tuple(samples[1:100])
+    assert chart.hidden_count == 2
+    assert chart.percentile_bounds == (1, 99)
+    assert chart.active is None and not chart.card_visible
+    assert chart.data is view and view.summary.count == 100
+    assert view.summary.excluded == 2
+    opened = []
+    chart.sample_activated.connect(opened.append)
+    QTest.keyClick(chart, Qt.Key.Key_End)
+    QTest.keyClick(chart, Qt.Key.Key_Return)
+    assert opened == [samples[99]]
+    chart.set_trim_extremes(False)
+    assert chart.points == tuple(samples)
+    assert chart.points[chart.active] == samples[99]
+    assert chart.hidden_count == 0
+    extreme = replace(samples[-1], output_tokens=10000)
+    chart.set_data(timeline([samples[1], samples[50], extreme], now=110, duration=60, step=30))
+    assert chart.maximum == 10000
+    chart.set_trim_extremes(True)
+    assert chart.maximum == 50 and chart.points == (samples[50],)
+    chart.set_data(timeline([], now=110, duration=60, step=30))
+    assert chart.points == () and chart.hidden_count == 0 and chart.percentile_bounds is None
+    assert chart.active is None and not chart.card_visible
+    chart.close()
+
+
 @pytest.mark.parametrize("mode", ["ultrafast", "fast", "standard", "other"])
 def test_reliability_controls_fill_for_every_mode(mode):
     from PySide6.QtGui import QColor, QImage, QPainter

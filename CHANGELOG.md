@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11 — Percentile chart display
+
+- Default the scatter plot to the current model/window's P1–P99 rates, rescale the vertical axis, and show the hidden-point count. Preserve all records and the full reliable-sample statistics, tray average, history, and CSV.
+- Add a persistent Settings switch to restore all points. Existing settings default to filtering; Save applies it, while Cancel or a failed save preserves the prior choice. Language changes retain the selection.
+- Use inclusive, linearly interpolated percentile boundaries across reliable and inferred points. Keep fewer than three points unfiltered, preserve tied boundary values, and retain keyboard/click access to visible samples.
+
 ## 0.1.10 — Reliable and inferred output rates
 
 - Show reliable output rates as filled markers and inferred lifecycle/response-cycle rates as hollow markers for every mode. Retain evidence and exclusions in history/CSV; weighted output summaries use reliable samples only. Persist observed cycle boundaries through incremental collection, recovery and restart with parser revision 14 and recovery revision 19.

@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--width", type=int, default=460)
     parser.add_argument("--language", choices=LANGUAGES, default="zh_CN")
     parser.add_argument("--range", choices=["30m", "1d", "7d"], default="30m")
+    parser.add_argument("--trim-extremes", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     app = QApplication([])
@@ -46,6 +47,7 @@ def main():
     panel.setWindowTitle(tr("TokenPulse · 词脉（演示数据）"))
     panel.apply(snapshot)
     panel.set_range(args.range)
+    panel.set_trim_extremes(args.trim_extremes)
     history = HistoryWindow()
     history.apply(list(snapshot.samples))
     settings = Settings(
@@ -54,10 +56,12 @@ def main():
             appearance=args.appearance,
             reduce_transparency=args.reduce_transparency,
             reduce_motion=args.reduce_motion,
+            trim_extremes=args.trim_extremes,
         )
     )
     empty = Panel()
     empty.apply(Snapshot(diagnostics=("no_sessions",)))
+    empty.set_trim_extremes(args.trim_extremes)
     for name, widget in [
         ("panel", panel),
         ("history", history),

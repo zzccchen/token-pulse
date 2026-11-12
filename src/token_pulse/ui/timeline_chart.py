@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QWidget
 
 from token_pulse.domain import Sample
 from token_pulse.i18n import tr
-from token_pulse.timeline import Timeline
+from token_pulse.timeline import Timeline, display_percentile_bounds
 from token_pulse.ui.theme import colors
 
 MODE_COLORS = {
@@ -123,6 +123,9 @@ class TimelineChart(QWidget):
         self.data: Timeline | None = None
         self.points: tuple[Sample, ...] = ()
         self.rates: tuple[float, ...] = ()
+        self.trim_extremes = False
+        self.percentile_bounds: tuple[float, float] | None = None
+        self.hidden_count = 0
         self.maximum = 10
         self.active: int | None = None
         self.card_visible = False
@@ -144,12 +147,28 @@ class TimelineChart(QWidget):
         )
         self.update()
 
+    def set_trim_extremes(self, enabled: bool) -> None:
+        self.trim_extremes = enabled
+        if self.data is not None:
+            self.set_data(self.data)
+
     def set_data(self, data: Timeline) -> None:
         old = self.points[self.active] if self.active is not None else None
         same_range = self.data and self.data.end - self.data.start == data.end - data.start
         self.data = data
         self.points = tuple(s for s in data.samples if s.display_tps is not None)
         self.rates = tuple(s.display_tps for s in self.points)
+        self.percentile_bounds = (
+            display_percentile_bounds(self.rates) if self.trim_extremes else None
+        )
+        total = len(self.points)
+        if self.percentile_bounds is not None:
+            low, high = self.percentile_bounds
+            self.points = tuple(
+                s for s, rate in zip(self.points, self.rates, strict=True) if low <= rate <= high
+            )
+            self.rates = tuple(s.display_tps for s in self.points)
+        self.hidden_count = total - len(self.points)
         self.maximum = max(10, math.ceil(max(self.rates, default=0) / 10) * 10)
         self._positions = None
         self.active = next(

@@ -16,6 +16,7 @@ class Preferences:
     reduce_transparency: bool = False
     reduce_motion: bool = False
     language: str = "system"
+    trim_extremes: bool = True
 
 
 def load(path: Path) -> Preferences:
@@ -31,6 +32,7 @@ def load(path: Path) -> Preferences:
             reduce_transparency=value.get("reduce_transparency") is True,
             reduce_motion=value.get("reduce_motion") is True,
             language=value.get("language") if value.get("language") in LANGUAGES else "system",
+            trim_extremes=value.get("trim_extremes") is not False,
         )
     except (OSError, ValueError, AttributeError):
         return Preferences()

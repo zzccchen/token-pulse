@@ -1,6 +1,26 @@
 """English translations keyed by Chinese source templates."""
 
 MESSAGES = {
+    "只显示 P1–P99": "Show only P1–P99",
+    "隐藏图表两端的极端点；统计、历史和 CSV 保留完整记录。保存后生效。": (
+        "Hide extreme points at both ends of the chart. Statistics, history and CSV keep all "
+        "records. Applies after saving."
+    ),
+    (
+        "按当前模型和时间范围内所有可绘制点（含推测点）的 TPS 计算第 1、99 百分位，"
+        "线性插值，保留边界值；不足 3 点时显示全部。\n"
+        "仅隐藏散点，不判定数据错误；均速、中位数、范围、历史和 CSV 不变。"
+    ): (
+        "Use the 1st and 99th TPS percentiles of all plottable points (including inferred points) "
+        "in the selected model and time range, with linear interpolation and inclusive bounds. "
+        "Show all when fewer than 3 points are available.\n"
+        "Only hides points; does not identify errors. Mean, median, range, history and CSV "
+        "are unchanged."
+    ),
+    "\n显示边界：{low:.3g}–{high:.3g} TPS": "\nVisible bounds: {low:.3g}–{high:.3g} TPS",
+    "P1–P99 · 图中 {shown} 点 · 隐藏 {hidden} 点；统计仍含全部可靠点": (
+        "P1–P99 · {shown} shown · {hidden} hidden; statistics use all reliable points"
+    ),
     "{value} 段 · {valid} 段可靠 · {inferred} 段推测 · {value2} 段无法估算": (
         "Records: {value} · Reliable: {valid} · Inferred: {inferred} · Unavailable: {value2}"
     ),

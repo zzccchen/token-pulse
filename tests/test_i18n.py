@@ -335,7 +335,12 @@ def test_language_preview_preserves_views_and_commits_only_on_save(tmp_path, mon
 
     class PreviewSettings(Settings):
         def exec(self):
+            assert self.trim_extremes.isChecked()
+            self.trim_extremes.setChecked(False)
             self.language.setCurrentIndex(self.language.findData("en"))
+            assert not self.trim_extremes.isChecked()
+            assert self.trim_extremes.text() == "Show only P1–P99"
+            assert controller.panel.chart.trim_extremes
             assert self.windowTitle() == "Settings · TokenPulse"
             assert self.heading.text() == "Appearance & monitoring"
             assert self.appearance.itemText(0) == "Light"
@@ -397,6 +402,8 @@ def test_language_preview_preserves_views_and_commits_only_on_save(tmp_path, mon
         selected_key, summary = controller.panel.selected_key, controller.panel.view.summary
         polls = controller.monitor.polls
         controller.settings()
+        assert controller.panel.chart.trim_extremes == (outcome != "save")
+        assert load(path).trim_extremes == (outcome != "save")
         assert controller.panel.selected_key == selected_key
         assert controller.panel.range_name == "7d"
         assert controller.panel.view.summary == summary
@@ -428,6 +435,7 @@ def test_language_preview_preserves_views_and_commits_only_on_save(tmp_path, mon
         controller.close()
     restarted = Controller(app, tmp_path)
     try:
+        assert restarted.panel.chart.trim_extremes == (outcome != "save")
         assert restarted.language == expected
     finally:
         restarted.close()

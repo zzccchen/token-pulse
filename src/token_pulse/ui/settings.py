@@ -77,6 +77,14 @@ class Settings(QDialog):
         self.number.setToolTip(tr("显示当前模型和时间范围内的平均速度，有有效数据时持续显示"))
         self.number.setChecked(preferences.tray_number)
         layout.addWidget(self.number)
+        self.trim_extremes = MaterialCheckBox(tr("只显示 P1–P99"))
+        self.trim_extremes.setChecked(preferences.trim_extremes)
+        layout.addWidget(self.trim_extremes)
+        self.percentile_note = text_label(
+            tr("隐藏图表两端的极端点；统计、历史和 CSV 保留完整记录。保存后生效。"), "muted"
+        )
+        self.percentile_note.setWordWrap(True)
+        layout.addWidget(self.percentile_note)
         self.notifications = MaterialCheckBox(tr("明确的请求异常发生时通知一次"))
         self.notifications.setChecked(preferences.notifications)
         layout.addWidget(self.notifications)
@@ -137,6 +145,10 @@ class Settings(QDialog):
         self.browse_button.setText(tr("选择目录"))
         self.number.setText(tr("托盘显示平均 TPS"))
         self.number.setToolTip(tr("显示当前模型和时间范围内的平均速度，有有效数据时持续显示"))
+        self.trim_extremes.setText(tr("只显示 P1–P99"))
+        self.percentile_note.setText(
+            tr("隐藏图表两端的极端点；统计、历史和 CSV 保留完整记录。保存后生效。")
+        )
         self.notifications.setText(tr("明确的请求异常发生时通知一次"))
         self.info.setText(tr("仅修改词脉的设置，不修改 Codex 配置。无系统托盘时使用普通窗口。"))
         self.buttons.button(QDialogButtonBox.StandardButton.Save).setText(tr("保存"))
@@ -163,4 +175,5 @@ class Settings(QDialog):
             self.reduce_transparency.isChecked(),
             self.reduce_motion.isChecked(),
             self.language.currentData(),
+            self.trim_extremes.isChecked(),
         )

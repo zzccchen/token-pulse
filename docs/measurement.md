@@ -67,6 +67,8 @@ Concurrent outputs each contribute their own duration. This average is not combi
 
 Windows are rolling 30-minute, 1-day, and 7-day ranges filtered by completion time. Future and out-of-range records do not contribute. The plot displays reliable outputs as filled markers and inferred lifecycle/cycle rates as hollow markers, without jitter or invented per-second values. The mean, median and range use reliable output samples only. Record count and conversation coverage include excluded samples.
 
+The **Show only P1–P99** checkbox in Settings is on by default, including for older settings files without this preference, and applies only to the scatter plot. It computes the 1st and 99th percentiles over all plottable rates (reliable and inferred) for the selected model and rolling window, using linear interpolation at zero-based rank `(n - 1) * p`. Points on either boundary remain visible, including ties; fewer than three points remain unfiltered to avoid hiding every point. Small samples can lose more than 2% of their points because counts are discrete. The vertical axis rescales to the visible points, and the panel reports shown/hidden counts. Refreshing or changing model/range recomputes the bounds; changing language preserves the toggle. Disabling it restores all points. Save persists and applies the choice across restarts; Cancel or a failed save leaves it unchanged. Hiding does not classify a measurement as invalid and does not affect the weighted mean, median, range, tray speed, record counts, history, or CSV export.
+
 ## Distinguish tier evidence
 
 | Evidence | What it establishes |

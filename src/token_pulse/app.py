@@ -46,6 +46,7 @@ class Controller:
             self.preferences.reduce_motion,
         )
         self.panel = Panel()
+        self.panel.set_trim_extremes(self.preferences.trim_extremes)
         self.panel.setWindowIcon(pulse_icon())
         self.history = HistoryWindow()
         self.history.setWindowIcon(pulse_icon())
@@ -145,6 +146,7 @@ class Controller:
             self.monitor = Monitor(Path(preferences.source), self.data_dir)
             self.monitor.start()
         self.preferences = preferences
+        self.panel.set_trim_extremes(preferences.trim_extremes)
         apply_theme(
             self.app,
             preferences.appearance,

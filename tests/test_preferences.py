@@ -24,3 +24,14 @@ def test_appearance_round_trips_and_old_settings_have_readable_defaults(tmp_path
     preferences = Preferences(appearance="dark", reduce_transparency=True, reduce_motion=True)
     save(path, preferences)
     assert load(path) == preferences
+
+
+def test_percentile_filter_defaults_on_and_persists_explicit_off(tmp_path):
+    path = tmp_path / "settings.json"
+    for content in ("{}", '{"trim_extremes":null}', '{"trim_extremes":"false"}'):
+        path.write_text(content)
+        assert load(path).trim_extremes
+    for enabled in (False, True):
+        preferences = Preferences(trim_extremes=enabled)
+        save(path, preferences)
+        assert load(path) == preferences

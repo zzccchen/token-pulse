@@ -13,6 +13,23 @@ from token_pulse.stats import Summary, summarize, unique
 RANGES = {"30m": (1800, 30), "1d": (86400, 1800), "7d": (HISTORY_SECONDS, 14400)}
 
 
+def display_percentile_bounds(rates: tuple[float, ...]) -> tuple[float, float] | None:
+    """Inclusive, linearly interpolated P1/P99 for display only.
+
+    Fewer than three points stay visible: interpolation could otherwise hide
+    every point. These bounds never determine measurement validity.
+    """
+    if len(rates) < 3:
+        return None
+    ordered = sorted(rates)
+
+    def percentile(percent: int) -> float:
+        index, remainder = divmod((len(ordered) - 1) * percent, 100)
+        return ordered[index] + (ordered[index + 1] - ordered[index]) * remainder / 100
+
+    return percentile(1), percentile(99)
+
+
 def series_key(sample: Sample) -> tuple[Context]:
     return sample.group
 

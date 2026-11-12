@@ -285,7 +285,13 @@ class Panel(QMainWindow):
         metric_layout.addLayout(sample_line)
         self.chart = TimelineChart()
         self.chart.sample_activated.connect(self.show_sample)
+        self.chart.set_trim_extremes(True)
+        self.chart_filter_info = text_label("", "muted")
+        self.chart_filter_info.setWordWrap(True)
+        self.chart_filter_info.hide()
+        metric_layout.addWidget(self.chart_filter_info)
         metric_layout.addWidget(self.chart)
+        self._refresh_chart_filter()
         layout.addWidget(sheet, 1)
         self.activity = text_label(tr("尚未发现活动对话"), "muted")
         self.activity.setWordWrap(True)
@@ -414,6 +420,29 @@ class Panel(QMainWindow):
             button.setChecked(title == name)
         self.render()
 
+    def set_trim_extremes(self, enabled: bool) -> None:
+        self.chart.set_trim_extremes(enabled)
+        self._refresh_chart_filter()
+
+    def _refresh_chart_filter(self) -> None:
+        hint = tr(
+            "按当前模型和时间范围内所有可绘制点（含推测点）的 TPS 计算第 1、99 百分位，"
+            "线性插值，保留边界值；不足 3 点时显示全部。\n"
+            "仅隐藏散点，不判定数据错误；均速、中位数、范围、历史和 CSV 不变。"
+        )
+        if self.chart.percentile_bounds is not None:
+            low, high = self.chart.percentile_bounds
+            hint += tr("\n显示边界：{low:.3g}–{high:.3g} TPS", low=low, high=high)
+        self.chart_filter_info.setToolTip(hint)
+        self.chart_filter_info.setText(
+            tr(
+                "P1–P99 · 图中 {shown} 点 · 隐藏 {hidden} 点；统计仍含全部可靠点",
+                shown=len(self.chart.points),
+                hidden=self.chart.hidden_count,
+            )
+        )
+        self.chart_filter_info.setVisible(self.chart.trim_extremes)
+
     def render(self, now: float | None = None) -> None:
         now = time.time() if now is None else now
         accent = colors()["accent"]
@@ -446,6 +475,7 @@ class Panel(QMainWindow):
             )
             self.chart.set_data(self.view)
             self._view_cache = signature
+        self._refresh_chart_filter()
         summary = self.view.summary
         self.speed_value.setAccessibleName(
             tr("近 {range_name}平均输出速度，估算值", range_name=self.range_label)
